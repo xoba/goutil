@@ -30,11 +30,11 @@ type Interface interface {
 }
 
 type GetRequest struct {
-	Object BucketAndKey
+	Object Object
 }
 
 type PutRequest struct {
-	Object        BucketAndKey
+	Object        Object
 	ContentType   string
 	ContentLength uint64
 	ReaderFact    goutil.ReaderFactory
@@ -48,10 +48,10 @@ type ListRequest struct {
 }
 
 type DeleteRequest struct {
-	Object BucketAndKey
+	Object Object
 }
 
-type BucketAndKey struct {
+type Object struct {
 	Bucket string
 	Key    string
 }
@@ -74,12 +74,12 @@ type ListBucketResult struct {
 	Contents                        []ListBucketResultContents
 }
 
-func GetDefault(a goaws.Auth) Interface {
+func GetDefault(a aws.Auth) Interface {
 	return SmartS3{Auth: a, Strat: &goutil.RetryBackoffStrat{Delay: time.Second, Retries: 3}}
 }
 
 type SmartS3 struct {
-	Auth  goaws.Auth
+	Auth  aws.Auth
 	Strat goutil.RetryStrategy
 }
 
@@ -132,7 +132,7 @@ func mimeType(name string) string {
 	return mime.TypeByExtension(ext)
 }
 
-func list(auth goaws.Auth, req ListRequest) (out ListBucketResult, err error) {
+func list(auth aws.Auth, req ListRequest) (out ListBucketResult, err error) {
 	if req.Bucket == "" {
 		return out, errors.New("no bucket name")
 	}
@@ -175,7 +175,7 @@ func list(auth goaws.Auth, req ListRequest) (out ListBucketResult, err error) {
 	return
 }
 
-func del(auth goaws.Auth, req DeleteRequest) (err error) {
+func del(auth aws.Auth, req DeleteRequest) (err error) {
 	now := time.Now()
 	sig, err := signDelete(req, auth, now)
 	if err != nil {
@@ -199,7 +199,7 @@ func del(auth goaws.Auth, req DeleteRequest) (err error) {
 	return nil
 }
 
-func get(auth goaws.Auth, req GetRequest) (rc io.ReadCloser, err error) {
+func get(auth aws.Auth, req GetRequest) (rc io.ReadCloser, err error) {
 	now := time.Now()
 	sig, err := signGet(req, auth, now)
 	if err != nil {
@@ -226,7 +226,7 @@ func format(t time.Time) string {
 	return t.UTC().Format(time.RFC1123Z)
 }
 
-func put(auth goaws.Auth, req PutRequest) (err error) {
+func put(auth aws.Auth, req PutRequest) (err error) {
 	now := time.Now()
 	transport := http.DefaultTransport
 	reader, err := req.ReaderFact.CreateReader()
@@ -259,22 +259,22 @@ func put(auth goaws.Auth, req PutRequest) (err error) {
 	return nil
 }
 
-func signPut(r PutRequest, a goaws.Auth, t time.Time) (string, error) {
+func signPut(r PutRequest, a aws.Auth, t time.Time) (string, error) {
 	return sign(a, "PUT"+N+N+r.ContentType+N+format(t)+N+"/"+r.Object.Bucket+"/"+r.Object.Key)
 }
 
-func signList(r ListRequest, a goaws.Auth, t time.Time) (string, error) {
+func signList(r ListRequest, a aws.Auth, t time.Time) (string, error) {
 	return sign(a, "GET"+N+N+N+format(t)+N+"/"+r.Bucket+"/")
 }
 
-func signGet(r GetRequest, a goaws.Auth, t time.Time) (string, error) {
+func signGet(r GetRequest, a aws.Auth, t time.Time) (string, error) {
 	return sign(a, "GET"+N+N+N+format(t)+N+"/"+r.Object.Bucket+"/"+r.Object.Key)
 }
-func signDelete(r DeleteRequest, a goaws.Auth, t time.Time) (string, error) {
+func signDelete(r DeleteRequest, a aws.Auth, t time.Time) (string, error) {
 	return sign(a, "DELETE"+N+N+N+format(t)+N+"/"+r.Object.Bucket+"/"+r.Object.Key)
 }
 
-func sign(a goaws.Auth, toSign string) (signature string, err error) {
+func sign(a aws.Auth, toSign string) (signature string, err error) {
 	h := hmac.New(sha1.New, []byte(a.SecretKey))
 	if _, err = h.Write([]byte(toSign)); err != nil {
 		return
