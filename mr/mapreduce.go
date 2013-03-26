@@ -9,15 +9,15 @@ import (
 )
 
 const (
-	CAPACITY = 10000
+	DEFAULT_CAPACITY = 10000
 )
 
 func NewLocalFramework(mappers, reducers int) Framework {
 	return &_framework{
 		mappers:  mappers,
 		reducers: reducers,
-		input:    make(chan KeyValue, CAPACITY),
-		output:   make(chan KeyValue, CAPACITY),
+		input:    make(chan KeyValue, mappers),
+		output:   make(chan KeyValue, reducers),
 	}
 }
 
@@ -69,7 +69,7 @@ func (f *_framework) Run(mr MapReducer, d Driver) (<-chan KeyValue, error) {
 
 func (f _framework) runMapper(mr MapReducer) {
 
-	collector := make(chan KeyValue, CAPACITY)
+	collector := make(chan KeyValue, DEFAULT_CAPACITY)
 
 	go f.runMapCollectorAndShuffle(collector, mr)
 
@@ -77,7 +77,7 @@ func (f _framework) runMapper(mr MapReducer) {
 
 	for i := 0; i < f.mappers; i++ {
 		wg.Add(1)
-		per := make(chan KeyValue, CAPACITY)
+		per := make(chan KeyValue, DEFAULT_CAPACITY)
 		go func() {
 			for v := range per {
 				collector <- v
@@ -104,13 +104,13 @@ func (f _framework) runMapCollectorAndShuffle(collector chan KeyValue, mr MapRed
 
 func (f _framework) runReducer(mr MapReducer, slice keyValueSlice) {
 
-	jobs := make(chan ReduceJob, CAPACITY)
+	jobs := make(chan ReduceJob, DEFAULT_CAPACITY)
 
 	wg := sync.WaitGroup{}
 
 	for i := 0; i < f.reducers; i++ {
 		wg.Add(1)
-		per := make(chan KeyValue, CAPACITY)
+		per := make(chan KeyValue, DEFAULT_CAPACITY)
 		go func() {
 			for v := range per {
 				f.output <- v
