@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"container/list"
 	"errors"
+	"fmt"
 	"sort"
 	"sync"
 )
@@ -50,6 +51,11 @@ type _framework struct {
 	used              bool
 	mappers, reducers int
 	input, output     chan KeyValue
+	name              string
+}
+
+func (f *_framework) String() string {
+	return f.name
 }
 
 func (f *_framework) Run(mr MapReducer, d Driver) (<-chan KeyValue, error) {
@@ -62,7 +68,7 @@ func (f *_framework) Run(mr MapReducer, d Driver) (<-chan KeyValue, error) {
 	return f.output, nil
 }
 
-func (f _framework) runMapper(mr MapReducer) {
+func (f *_framework) runMapper(mr MapReducer) {
 
 	collector := make(chan KeyValue, 2*f.mappers)
 
@@ -87,24 +93,19 @@ func (f _framework) runMapper(mr MapReducer) {
 	close(collector)
 }
 
-func (f _framework) runMapCollectorAndShuffle(collector chan KeyValue, mr MapReducer) {
-
+func (f *_framework) runMapCollectorAndShuffle(collector chan KeyValue, mr MapReducer) {
 	shuf := list.New()
 	for kv := range collector {
 		shuf.PushBack(kv)
 	}
-
 	// if mapreducer is also valuecomparator...
 	vc, _ := mr.(ValueComparator)
-
 	slice := createKVSlice(shuf, vc)
-
 	sort.Sort(slice)
-
 	f.runReducer(mr, slice)
 }
 
-func (f _framework) runReducer(mr MapReducer, slice keyValueSlice) {
+func (f *_framework) runReducer(mr MapReducer, slice keyValueSlice) {
 
 	jobs := make(chan ReduceJob, 2*f.reducers)
 
@@ -123,16 +124,18 @@ func (f _framework) runReducer(mr MapReducer, slice keyValueSlice) {
 	}
 
 	var lastKey string
+	first:= true;
 	var job ReduceJob
 	var values chan Value
 
 	for _, x := range slice.Slice {
 		key := x.Key
-		if key != lastKey {
+		if key != lastKey || first {
 			valueCloser(values)
 			values = make(chan Value) // synchronous, to preserve ordering
 			job = ReduceJob{Key: key, Values: values}
 			jobs <- job
+			first = false;
 		}
 		values <- x.Value
 		lastKey = key
