@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"container/list"
 	"errors"
-	"fmt"
 	"sort"
 	"sync"
 )
@@ -124,7 +123,7 @@ func (f *_framework) runReducer(mr MapReducer, slice keyValueSlice) {
 	}
 
 	var lastKey string
-	first:= true;
+	first := true
 	var job ReduceJob
 	var values chan Value
 
@@ -135,7 +134,7 @@ func (f *_framework) runReducer(mr MapReducer, slice keyValueSlice) {
 			values = make(chan Value) // synchronous, to preserve ordering
 			job = ReduceJob{Key: key, Values: values}
 			jobs <- job
-			first = false;
+			first = false
 		}
 		values <- x.Value
 		lastKey = key
