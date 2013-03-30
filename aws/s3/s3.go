@@ -25,6 +25,7 @@ const (
 type Interface interface {
 	Put(req PutRequest) error
 	Get(req GetRequest) (io.ReadCloser, error)
+	GetObject(req GetRequest) ([]byte, error)
 	List(req ListRequest) (ListBucketResult, error)
 	Delete(req DeleteRequest) error
 }
@@ -83,15 +84,15 @@ type SmartS3 struct {
 	Strat goutil.RetryStrategy
 }
 
-func (s SmartS3) retry(f func() (interface{}, error)) (v interface{}, err error) {
-	return goutil.Retry(s.Strat, f)
+func (s SmartS3) retry(msg string, f func() (interface{}, error)) (v interface{}, err error) {
+	return goutil.Retry(msg, s.Strat.NewInstance(), f)
 }
 
 func (s SmartS3) List(req ListRequest) (ListBucketResult, error) {
 	f := func() (interface{}, error) {
 		return list(s.Auth, req)
 	}
-	v, err := s.retry(f)
+	v, err := s.retry(p(req), f)
 	if err != nil {
 		return ListBucketResult{}, err
 	} else {
@@ -99,15 +100,30 @@ func (s SmartS3) List(req ListRequest) (ListBucketResult, error) {
 	}
 }
 
+func p(v interface{}) string {
+	return fmt.Sprintf("%#v", v)
+}
+
 func (s SmartS3) Get(req GetRequest) (io.ReadCloser, error) {
 	f := func() (interface{}, error) {
 		return get(s.Auth, req)
 	}
-	v, err := s.retry(f)
+	v, err := s.retry(p(req), f)
 	if err != nil {
 		return nil, err
 	} else {
 		return v.(io.ReadCloser), err
+	}
+}
+func (s SmartS3) GetObject(req GetRequest) ([]byte, error) {
+	f := func() (interface{}, error) {
+		return getObject(s.Auth, req)
+	}
+	v, err := s.retry(p(req), f)
+	if err != nil {
+		return nil, err
+	} else {
+		return v.([]byte), err
 	}
 }
 
@@ -115,7 +131,7 @@ func (s SmartS3) Put(req PutRequest) error {
 	f := func() (interface{}, error) {
 		return nil, put(s.Auth, req)
 	}
-	_, err := s.retry(f)
+	_, err := s.retry(p(req), f)
 	return err
 }
 
@@ -123,7 +139,7 @@ func (s SmartS3) Delete(req DeleteRequest) error {
 	f := func() (interface{}, error) {
 		return nil, del(s.Auth, req)
 	}
-	_, err := s.retry(f)
+	_, err := s.retry(p(req), f)
 	return err
 }
 
@@ -170,7 +186,10 @@ func list(auth aws.Auth, req ListRequest) (out ListBucketResult, err error) {
 		return out, errors.New(resp.Status)
 	}
 	var buf bytes.Buffer
-	io.Copy(&buf, resp.Body)
+	_, err = io.Copy(&buf, resp.Body)
+	if err != nil {
+		return
+	}
 	xml.Unmarshal(buf.Bytes(), &out)
 	return
 }
@@ -199,11 +218,24 @@ func del(auth aws.Auth, req DeleteRequest) (err error) {
 	return nil
 }
 
-func get(auth aws.Auth, req GetRequest) (rc io.ReadCloser, err error) {
+func getObject(auth aws.Auth, req GetRequest) ([]byte, error) {
+	r, err := get(auth, req)
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	_, err = io.Copy(&buf, r)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func get(auth aws.Auth, req GetRequest) (io.ReadCloser, error) {
 	now := time.Now()
 	sig, err := signGet(req, auth, now)
 	if err != nil {
-		return
+		return nil, err
 	}
 	transport := http.DefaultTransport
 	hreq, err := http.NewRequest("GET", "https://"+req.Object.Bucket+".s3.amazonaws.com/"+req.Object.Key, nil)

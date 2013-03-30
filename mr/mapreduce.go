@@ -8,16 +8,12 @@ import (
 	"sync"
 )
 
-const (
-	DEFAULT_CAPACITY = 10000
-)
-
 func NewLocalFramework(mappers, reducers int) Framework {
 	return &_framework{
 		mappers:  mappers,
 		reducers: reducers,
-		input:    make(chan KeyValue, mappers),
-		output:   make(chan KeyValue, reducers),
+		input:    make(chan KeyValue, 2*mappers),
+		output:   make(chan KeyValue, 2*reducers),
 	}
 }
 
@@ -28,7 +24,6 @@ type Framework interface {
 type MapReducer interface {
 	Map(input <-chan KeyValue, collector chan<- KeyValue)
 	Reduce(jobs <-chan ReduceJob, collector chan<- KeyValue)
-	ValueComparator
 }
 
 type KeyValue struct {
@@ -69,7 +64,7 @@ func (f *_framework) Run(mr MapReducer, d Driver) (<-chan KeyValue, error) {
 
 func (f _framework) runMapper(mr MapReducer) {
 
-	collector := make(chan KeyValue, DEFAULT_CAPACITY)
+	collector := make(chan KeyValue, 2*f.mappers)
 
 	go f.runMapCollectorAndShuffle(collector, mr)
 
@@ -77,7 +72,7 @@ func (f _framework) runMapper(mr MapReducer) {
 
 	for i := 0; i < f.mappers; i++ {
 		wg.Add(1)
-		per := make(chan KeyValue, DEFAULT_CAPACITY)
+		per := make(chan KeyValue, 2*f.mappers)
 		go func() {
 			for v := range per {
 				collector <- v
@@ -93,24 +88,31 @@ func (f _framework) runMapper(mr MapReducer) {
 }
 
 func (f _framework) runMapCollectorAndShuffle(collector chan KeyValue, mr MapReducer) {
+
 	shuf := list.New()
 	for kv := range collector {
 		shuf.PushBack(kv)
 	}
-	slice := createKVSlice(shuf, mr)
+
+	// if mapreducer is also valuecomparator...
+	vc, _ := mr.(ValueComparator)
+
+	slice := createKVSlice(shuf, vc)
+
 	sort.Sort(slice)
+
 	f.runReducer(mr, slice)
 }
 
 func (f _framework) runReducer(mr MapReducer, slice keyValueSlice) {
 
-	jobs := make(chan ReduceJob, DEFAULT_CAPACITY)
+	jobs := make(chan ReduceJob, 2*f.reducers)
 
 	wg := sync.WaitGroup{}
 
 	for i := 0; i < f.reducers; i++ {
 		wg.Add(1)
-		per := make(chan KeyValue, DEFAULT_CAPACITY)
+		per := make(chan KeyValue, 2*f.reducers)
 		go func() {
 			for v := range per {
 				f.output <- v
@@ -174,19 +176,20 @@ func (m keyValueSlice) Less(i, j int) bool {
 
 	cmp := bytes.Compare([]byte(i0.Key), []byte(j0.Key))
 
-	if cmp == 0 {
+	if cmp == 0 && m.Comparator != nil {
 		return m.Comparator.Less(i0.Value, j0.Value)
 	} else {
 		return cmp < 0
 	}
 }
 
-func createKVSlice(x *list.List, c ValueComparator) keyValueSlice {
+func createKVSlice(x *list.List, vc ValueComparator) keyValueSlice {
+
 	out := make([]KeyValue, x.Len())
 	i := 0
 	for e := x.Front(); e != nil; e = e.Next() {
 		out[i] = e.Value.(KeyValue)
 		i++
 	}
-	return keyValueSlice{Slice: out, Comparator: c}
+	return keyValueSlice{Slice: out, Comparator: vc}
 }

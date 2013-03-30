@@ -16,25 +16,40 @@ func PlatformInit() {
 
 // e.g., can combine retry logic and backoff in time together, or any other strategy
 type RetryStrategy interface {
-	// returns whether or not to retry
+	NewInstance() RetryStrategyInstance
+}
+
+type RetryStrategyInstance interface {
+	// returns whether or not to retry, backing off in time if it likes
 	Retry() bool
+}
+
+type RetryBackoffStratInstance struct {
+	retries int
+	factor  float64
+	delay   time.Duration
+	count   int
 }
 
 type RetryBackoffStrat struct {
 	Delay         time.Duration
 	Retries       int
 	BackoffFactor float64
-	count         int
 }
 
-func (r *RetryBackoffStrat) Retry() bool {
-	if r.count < r.Retries {
+func (r RetryBackoffStrat) NewInstance() RetryStrategyInstance {
+	f := r.BackoffFactor
+	if f < 1.0 {
+		f = 1.0
+	}
+	return &RetryBackoffStratInstance{delay: r.Delay, retries: r.Retries, factor: f}
+}
+
+func (r *RetryBackoffStratInstance) Retry() bool {
+	if r.count < r.retries {
 		r.count++
-		SleepRand(r.Delay)
-		if r.BackoffFactor == 0.0 {
-			r.BackoffFactor = 3.0
-		}
-		r.Delay = time.Duration(int64(r.BackoffFactor * float64(r.Delay)))
+		SleepRand(r.delay)
+		r.delay = time.Duration(int64(r.factor * float64(r.delay)))
 		return true
 	}
 	return false
@@ -48,7 +63,8 @@ func SleepRand(t time.Duration) {
 }
 
 // retries something, generically
-func Retry(bs RetryStrategy, f func() (interface{}, error)) (v interface{}, err error) {
+func Retry(msg string, bs RetryStrategyInstance, f func() (interface{}, error)) (v interface{}, err error) {
+	retries := 0
 	for {
 		v, err = f()
 		if err == nil {
@@ -56,6 +72,8 @@ func Retry(bs RetryStrategy, f func() (interface{}, error)) (v interface{}, err 
 		}
 		if !bs.Retry() {
 			return
+		} else {
+			retries++
 		}
 	}
 }
