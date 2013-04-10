@@ -24,6 +24,7 @@ const (
 
 type Interface interface {
 	Put(req PutRequest) error
+	PutObject(req PutObjectRequest) error
 	Get(req GetRequest) (io.ReadCloser, error)
 	GetObject(req GetRequest) ([]byte, error)
 	List(req ListRequest) (ListBucketResult, error)
@@ -35,10 +36,15 @@ type GetRequest struct {
 }
 
 type PutRequest struct {
-	Object        Object
-	ContentType   string
-	ContentLength uint64
-	ReaderFact    goutil.ReaderFactory
+	Object      Object
+	ContentType string
+	ReaderFact  goutil.ReaderFactory
+}
+
+type PutObjectRequest struct {
+	Object      Object
+	ContentType string
+	Data        []byte
 }
 
 type ListRequest struct {
@@ -76,7 +82,7 @@ type ListBucketResult struct {
 }
 
 func GetDefault(a aws.Auth) Interface {
-	return SmartS3{Auth: a, Strat: &goutil.RetryBackoffStrat{Delay: time.Second, Retries: 3}}
+	return SmartS3{Auth: a, Strat: &goutil.RetryBackoffStrat{BackoffFactor: 1.5, Delay: time.Second, Retries: 5}}
 }
 
 type SmartS3 struct {
@@ -130,6 +136,13 @@ func (s SmartS3) GetObject(req GetRequest) ([]byte, error) {
 func (s SmartS3) Put(req PutRequest) error {
 	f := func() (interface{}, error) {
 		return nil, put(s.Auth, req)
+	}
+	_, err := s.retry(p(req), f)
+	return err
+}
+func (s SmartS3) PutObject(req PutObjectRequest) error {
+	f := func() (interface{}, error) {
+		return nil, putObject(s.Auth, req)
 	}
 	_, err := s.retry(p(req), f)
 	return err
@@ -265,6 +278,7 @@ func put(auth aws.Auth, req PutRequest) (err error) {
 	if err != nil {
 		return err
 	}
+	defer reader.Close()
 	hreq, err := http.NewRequest("PUT", "https://"+req.Object.Bucket+".s3.amazonaws.com/"+req.Object.Key, reader)
 	if err != nil {
 		return err
@@ -273,12 +287,13 @@ func put(auth aws.Auth, req PutRequest) (err error) {
 	if len(req.ContentType) == 0 {
 		req.ContentType = mimeType(req.Object.Key)
 	}
-	sig, err := signPut(req, auth, now)
+	sig, err := signPut(req.Object, req.ContentType, auth, now)
 	if err != nil {
 		return
 	}
+	hreq.ContentLength = int64(req.ReaderFact.Len())
 	hreq.Header.Add("Content-Type", req.ContentType)
-	hreq.Header.Add("Content-Length", string(req.ContentLength))
+	hreq.Header.Add("Content-Length", string(req.ReaderFact.Len()))
 	hreq.Header.Add("Authorization", "AWS "+auth.AccessKey+":"+sig)
 	resp, err := transport.RoundTrip(hreq)
 	if err != nil {
@@ -291,8 +306,39 @@ func put(auth aws.Auth, req PutRequest) (err error) {
 	return nil
 }
 
-func signPut(r PutRequest, a aws.Auth, t time.Time) (string, error) {
-	return sign(a, "PUT"+N+N+r.ContentType+N+format(t)+N+"/"+r.Object.Bucket+"/"+r.Object.Key)
+func putObject(auth aws.Auth, req PutObjectRequest) (err error) {
+	now := time.Now()
+	transport := http.DefaultTransport
+	reader := bytes.NewBuffer(req.Data)
+	hreq, err := http.NewRequest("PUT", "https://"+req.Object.Bucket+".s3.amazonaws.com/"+req.Object.Key, reader)
+	if err != nil {
+		return err
+	}
+	hreq.Header.Add("Date", format(now))
+	if len(req.ContentType) == 0 {
+		req.ContentType = mimeType(req.Object.Key)
+	}
+	sig, err := signPut(req.Object, req.ContentType, auth, now)
+	if err != nil {
+		return
+	}
+	hreq.ContentLength = int64(len(req.Data))
+	hreq.Header.Add("Content-Type", req.ContentType)
+	hreq.Header.Add("Content-Length", string(len(req.Data)))
+	hreq.Header.Add("Authorization", "AWS "+auth.AccessKey+":"+sig)
+	resp, err := transport.RoundTrip(hreq)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return errors.New(resp.Status)
+	}
+	return nil
+}
+
+func signPut(o Object, ct string, a aws.Auth, t time.Time) (string, error) {
+	return sign(a, "PUT"+N+N+ct+N+format(t)+N+"/"+o.Bucket+"/"+o.Key)
 }
 
 func signList(r ListRequest, a aws.Auth, t time.Time) (string, error) {

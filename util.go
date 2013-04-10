@@ -79,13 +79,30 @@ func Retry(msg string, bs RetryStrategyInstance, f func() (interface{}, error)) 
 }
 
 type ReaderFactory interface {
-	CreateReader() (io.Reader, error)
+	CreateReader() (io.ReadCloser, error)
+	Len() uint64
 }
 
 type BufferReaderFact struct {
 	Buffer []byte
 }
 
-func (b BufferReaderFact) CreateReader() (io.Reader, error) {
-	return bytes.NewReader(b.Buffer), nil
+type BufferReader struct {
+	Buffer *bytes.Buffer
+}
+
+func (b BufferReader) Close() error {
+	return nil
+}
+func (b BufferReader) Read(p []byte) (n int, err error) {
+	return b.Buffer.Read(p)
+}
+
+func (b BufferReaderFact) Len() uint64 {
+	return uint64(len(b.Buffer))
+}
+
+func (b BufferReaderFact) CreateReader() (io.ReadCloser, error) {
+	buf := bytes.NewBuffer(b.Buffer)
+	return BufferReader{buf}, nil
 }

@@ -10,7 +10,7 @@ import (
 type BucketDriver struct {
 	Loaders        int
 	Bucket, Prefix string
-	Fraction       float64 // random fraction of keys to load, in range [0.0, 1.0]
+	Fraction       float64 // in range [0.0, 1.0]
 	S3             s3.Interface
 }
 
@@ -60,6 +60,7 @@ func loaderRoutine(wg *sync.WaitGroup, ss3 s3.Interface, bucket string, keys cha
 	if fraction == 0.0 {
 		fraction = 1.0
 	}
+
 	for key := range keys {
 		if rand.Float64() < fraction {
 			err := fetchFromS3(ss3, bucket, key, input)
