@@ -236,6 +236,7 @@ func getObject(auth aws.Auth, req GetRequest) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer r.Close()
 	var buf bytes.Buffer
 	_, err = io.Copy(&buf, r)
 	if err != nil {
