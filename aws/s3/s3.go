@@ -95,12 +95,16 @@ func (s SmartS3) retry(msg string, f func() (interface{}, error)) (v interface{}
 }
 
 func (s SmartS3) List(req ListRequest) (ListBucketResult, error) {
+	var out ListBucketResult
+	if req.Bucket == "" {
+		return out, errors.New("no bucket name")
+	}
 	f := func() (interface{}, error) {
 		return list(s.Auth, req)
 	}
 	v, err := s.retry(p(req), f)
 	if err != nil {
-		return ListBucketResult{}, err
+		return out, err
 	} else {
 		return v.(ListBucketResult), err
 	}
@@ -111,6 +115,10 @@ func p(v interface{}) string {
 }
 
 func (s SmartS3) Get(req GetRequest) (io.ReadCloser, error) {
+	err := checkObject(req.Object);
+	if (err != nil) {
+		return nil,err;
+	}
 	f := func() (interface{}, error) {
 		return get(s.Auth, req)
 	}
@@ -122,6 +130,10 @@ func (s SmartS3) Get(req GetRequest) (io.ReadCloser, error) {
 	}
 }
 func (s SmartS3) GetObject(req GetRequest) ([]byte, error) {
+	err := checkObject(req.Object);
+	if (err != nil) {
+		return nil,err;
+	}
 	f := func() (interface{}, error) {
 		return getObject(s.Auth, req)
 	}
@@ -134,25 +146,37 @@ func (s SmartS3) GetObject(req GetRequest) ([]byte, error) {
 }
 
 func (s SmartS3) Put(req PutRequest) error {
+	err := checkObject(req.Object);
+	if (err != nil) {
+		return err;
+	}
 	f := func() (interface{}, error) {
 		return nil, put(s.Auth, req)
 	}
-	_, err := s.retry(p(req), f)
+	_, err = s.retry(p(req), f)
 	return err
 }
 func (s SmartS3) PutObject(req PutObjectRequest) error {
+	err := checkObject(req.Object);
+	if (err != nil) {
+		return err;
+	}
 	f := func() (interface{}, error) {
 		return nil, putObject(s.Auth, req)
 	}
-	_, err := s.retry(p(req), f)
+	_, err = s.retry(p(req), f)
 	return err
 }
 
 func (s SmartS3) Delete(req DeleteRequest) error {
+	err := checkObject(req.Object);
+	if (err != nil) {
+		return err;
+	}
 	f := func() (interface{}, error) {
 		return nil, del(s.Auth, req)
 	}
-	_, err := s.retry(p(req), f)
+	_, err = s.retry(p(req), f)
 	return err
 }
 
@@ -161,10 +185,14 @@ func mimeType(name string) string {
 	return mime.TypeByExtension(ext)
 }
 
-func list(auth aws.Auth, req ListRequest) (out ListBucketResult, err error) {
-	if req.Bucket == "" {
-		return out, errors.New("no bucket name")
+func checkObject(o Object) error {
+	if (o.Bucket == "" || o.Key == "") {
+		return errors.New("illegal bucket or key");
 	}
+	return nil;
+}
+
+func list(auth aws.Auth, req ListRequest) (out ListBucketResult, err error) {
 	query := make(url.Values)
 	if req.MaxKeys > 0 {
 		query.Add("max-keys", fmt.Sprintf("%d", req.MaxKeys))
@@ -243,6 +271,9 @@ func getObject(auth aws.Auth, req GetRequest) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+type GetResponse struct {
 }
 
 func get(auth aws.Auth, req GetRequest) (io.ReadCloser, error) {
