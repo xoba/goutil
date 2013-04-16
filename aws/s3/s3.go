@@ -115,9 +115,9 @@ func p(v interface{}) string {
 }
 
 func (s SmartS3) Get(req GetRequest) (io.ReadCloser, error) {
-	err := checkObject(req.Object);
-	if (err != nil) {
-		return nil,err;
+	err := checkObject(req.Object)
+	if err != nil {
+		return nil, err
 	}
 	f := func() (interface{}, error) {
 		return get(s.Auth, req)
@@ -130,9 +130,9 @@ func (s SmartS3) Get(req GetRequest) (io.ReadCloser, error) {
 	}
 }
 func (s SmartS3) GetObject(req GetRequest) ([]byte, error) {
-	err := checkObject(req.Object);
-	if (err != nil) {
-		return nil,err;
+	err := checkObject(req.Object)
+	if err != nil {
+		return nil, err
 	}
 	f := func() (interface{}, error) {
 		return getObject(s.Auth, req)
@@ -146,9 +146,9 @@ func (s SmartS3) GetObject(req GetRequest) ([]byte, error) {
 }
 
 func (s SmartS3) Put(req PutRequest) error {
-	err := checkObject(req.Object);
-	if (err != nil) {
-		return err;
+	err := checkObject(req.Object)
+	if err != nil {
+		return err
 	}
 	f := func() (interface{}, error) {
 		return nil, put(s.Auth, req)
@@ -157,9 +157,9 @@ func (s SmartS3) Put(req PutRequest) error {
 	return err
 }
 func (s SmartS3) PutObject(req PutObjectRequest) error {
-	err := checkObject(req.Object);
-	if (err != nil) {
-		return err;
+	err := checkObject(req.Object)
+	if err != nil {
+		return err
 	}
 	f := func() (interface{}, error) {
 		return nil, putObject(s.Auth, req)
@@ -169,9 +169,9 @@ func (s SmartS3) PutObject(req PutObjectRequest) error {
 }
 
 func (s SmartS3) Delete(req DeleteRequest) error {
-	err := checkObject(req.Object);
-	if (err != nil) {
-		return err;
+	err := checkObject(req.Object)
+	if err != nil {
+		return err
 	}
 	f := func() (interface{}, error) {
 		return nil, del(s.Auth, req)
@@ -186,10 +186,10 @@ func mimeType(name string) string {
 }
 
 func checkObject(o Object) error {
-	if (o.Bucket == "" || o.Key == "") {
-		return errors.New("illegal bucket or key");
+	if o.Bucket == "" || o.Key == "" {
+		return errors.New("illegal bucket or key")
 	}
-	return nil;
+	return nil
 }
 
 func list(auth aws.Auth, req ListRequest) (out ListBucketResult, err error) {
