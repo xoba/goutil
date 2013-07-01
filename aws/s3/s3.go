@@ -1,6 +1,7 @@
 package s3
 
 import (
+	"errors"
 	"github.com/xoba/goutil"
 	"github.com/xoba/goutil/aws"
 	"io"
@@ -76,18 +77,26 @@ type SmartS3 struct {
 }
 
 func (s SmartS3) List(req ListRequest) (ListBucketResult, error) {
+	var out ListBucketResult
+	if req.Bucket == "" {
+		return out, errors.New("no bucket name")
+	}
 	f := func() (interface{}, error) {
 		return list(s.Auth, req)
 	}
 	v, err := s.retry(print(req), f)
 	if err != nil {
-		return ListBucketResult{}, err
+		return out, err
 	} else {
 		return v.(ListBucketResult), err
 	}
 }
 
 func (s SmartS3) Get(req GetRequest) (io.ReadCloser, error) {
+	err := checkObject(req.Object)
+	if err != nil {
+		return nil, err
+	}
 	f := func() (interface{}, error) {
 		return get(s.Auth, req)
 	}
@@ -99,6 +108,10 @@ func (s SmartS3) Get(req GetRequest) (io.ReadCloser, error) {
 	}
 }
 func (s SmartS3) GetObject(req GetRequest) ([]byte, error) {
+	err := checkObject(req.Object)
+	if err != nil {
+		return nil, err
+	}
 	f := func() (interface{}, error) {
 		return getObject(s.Auth, req)
 	}
@@ -111,29 +124,48 @@ func (s SmartS3) GetObject(req GetRequest) ([]byte, error) {
 }
 
 func (s SmartS3) Put(req PutRequest) error {
+	err := checkObject(req.Object)
+	if err != nil {
+		return err
+	}
 	f := func() (interface{}, error) {
 		return nil, put(s.Auth, req)
 	}
-	_, err := s.retry(print(req), f)
+	_, err = s.retry(print(req), f)
 	return err
 }
 
 func (s SmartS3) PutObject(req PutObjectRequest) error {
+	err := checkObject(req.Object)
+	if err != nil {
+		return err
+	}
 	f := func() (interface{}, error) {
 		return nil, putObject(s.Auth, req)
 	}
-	_, err := s.retry(print(req), f)
+	_, err = s.retry(print(req), f)
 	return err
 }
 
 func (s SmartS3) Delete(req DeleteRequest) error {
+	err := checkObject(req.Object)
+	if err != nil {
+		return err
+	}
 	f := func() (interface{}, error) {
 		return nil, del(s.Auth, req)
 	}
-	_, err := s.retry(print(req), f)
+	_, err = s.retry(print(req), f)
 	return err
 }
 
 func (s SmartS3) retry(msg string, f func() (interface{}, error)) (v interface{}, err error) {
 	return goutil.Retry(msg, s.Strat.NewInstance(), f)
+}
+
+func checkObject(o Object) error {
+	if o.Bucket == "" || o.Key == "" {
+		return errors.New("illegal bucket or key")
+	}
+	return nil
 }
