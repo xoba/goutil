@@ -3,6 +3,7 @@ package tool
 import (
 	"bufio"
 	"bytes"
+	"flag"
 	"fmt"
 	"os"
 	"reflect"
@@ -17,9 +18,36 @@ type Interface interface {
 	Run(args []string)
 }
 
+func ConfirmYorN(msg string) bool {
+	fmt.Printf("%s [N] ", msg)
+	var resp string
+	_, err := fmt.Scanf("%s", &resp)
+	if err != nil {
+		return false
+	}
+	if len(resp) == 0 {
+		resp = "n"
+	}
+	resp = strings.ToLower(resp)
+	return !strings.Contains(resp, "n") && strings.Contains(resp, "y")
+}
+
+func SummarizeFlags(fs *flag.FlagSet) {
+	fmt.Println("running with:")
+	fs.VisitAll(func(f *flag.Flag) {
+		fmt.Printf("\t-%s=\"%s\" (%s", f.Name, f.Value.String(), f.Usage)
+		if f.Value.String() != f.DefValue {
+			fmt.Printf(", different than default of \"%s\"", f.DefValue)
+		}
+		fmt.Println(")")
+	})
+
+}
+
 func Run() {
+
 	if len(os.Args) < 2 {
-		fmt.Println("nothing to run, see options:\n")
+		fmt.Println("nothing to run, see options; -help shows more:\n")
 
 		var names []string
 		for k, _ := range tools {
@@ -28,8 +56,7 @@ func Run() {
 
 		sort.Strings(names)
 
-		cols := strings.Split("command,description,code,tags", ",")
-
+		var hasTags bool
 		var rows []map[string]string
 
 		for _, k := range names {
@@ -47,23 +74,31 @@ func Run() {
 			if len(tags) > 0 {
 				sort.Strings(tags)
 				row["tags"] = strings.Join(tags, ", ")
+				hasTags = true
 			}
 
 			rows = append(rows, row)
 		}
 
+		cols := strings.Split("command,description,code", ",")
+
+		if hasTags {
+			cols = append(cols, "tags")
+		}
+
 		fmt.Println(FormatTextTable(false, " ", cols, rows))
 
-		os.Exit(1)
-	}
-	name := os.Args[1]
-	t, ok := tools[name]
-	if !ok {
-		fmt.Printf("no such tool: %s\n", name)
-		os.Exit(1)
-	}
+	} else {
 
-	t.Run(os.Args[2:])
+		name := os.Args[1]
+		t, ok := tools[name]
+		if !ok {
+			fmt.Printf("no such tool: %s\n", name)
+			os.Exit(1)
+		}
+
+		t.Run(os.Args[2:])
+	}
 }
 
 var tools map[string]Interface = make(map[string]Interface)
