@@ -23,6 +23,10 @@ import (
 	"time"
 )
 
+type Mapper interface {
+	Map(items <-chan KeyValue, collector chan<- KeyValue, counters chan<- Count)
+}
+
 type Reducer interface {
 	Reduce(jobs <-chan ReduceJob, collector chan<- KeyValue, counters chan<- Count)
 }
@@ -38,10 +42,75 @@ type Count struct {
 	Amount         int
 }
 
+func runOutput(wg *sync.WaitGroup, collector chan KeyValue) {
+	defer wg.Done()
+	out := bufio.NewWriter(os.Stdout)
+	defer out.Flush()
+	for kv := range collector {
+		out.WriteString(fmt.Sprintf("%s\t%s\n", kv.Key, kv.Value))
+	}
+}
+
+func runCounters(wg *sync.WaitGroup, counters chan Count) {
+	defer wg.Done()
+	for c := range counters {
+		c.Group = strings.Replace(c.Group, ",", "", -1)
+		c.Counter = strings.Replace(c.Counter, ",", "", -1)
+		os.Stderr.Write([]byte(fmt.Sprintf("reporter:counter:%s,%s,%d\n", c.Group, c.Counter, c.Amount)))
+	}
+}
+
+func RunStreamingMapper(m Mapper) {
+
+	var wg sync.WaitGroup
+	defer wg.Wait()
+
+	counters := make(chan Count)
+	collector := make(chan KeyValue)
+
+	items := make(chan KeyValue)
+	defer close(items)
+
+	wg.Add(1)
+	go func() {
+		m.Map(items, collector, counters)
+		wg.Done()
+	}()
+
+	wg.Add(1)
+	go runOutput(&wg, collector)
+
+	wg.Add(1)
+	go runCounters(&wg, counters)
+
+	b := bufio.NewReader(os.Stdin)
+
+	for {
+		line, err := b.ReadString('\n')
+		if err != nil {
+			break
+		}
+
+		line = line[:len(line)-1]
+
+		i := strings.Index(line, "\t")
+
+		if i >= 0 {
+			key := line[:i]
+			value := line[i+1:]
+			items <- KeyValue{Key: key, Value: value}
+		} else {
+			items <- KeyValue{Key: line}
+		}
+	}
+
+}
+
 func RunStreamingReducer(r Reducer) {
 
 	counters := make(chan Count)
 	collector := make(chan KeyValue)
+
 	jobs := make(chan ReduceJob)
 
 	var wg sync.WaitGroup
@@ -53,28 +122,10 @@ func RunStreamingReducer(r Reducer) {
 	}()
 
 	wg.Add(1)
-	go func() {
-		func() {
-			out := bufio.NewWriter(os.Stdout)
-			defer out.Flush()
-			for kv := range collector {
-				out.WriteString(fmt.Sprintf("%s\t%s\n", kv.Key, kv.Value))
-			}
-		}()
-		wg.Done()
-	}()
+	go runOutput(&wg, collector)
 
 	wg.Add(1)
-	go func() {
-		func() {
-			for c := range counters {
-				c.Group = strings.Replace(c.Group, ",", "", -1)
-				c.Counter = strings.Replace(c.Counter, ",", "", -1)
-				os.Stderr.Write([]byte(fmt.Sprintf("reporter:counter:%s,%s,%d\n", c.Group, c.Counter, c.Amount)))
-			}
-		}()
-		wg.Done()
-	}()
+	go runCounters(&wg, counters)
 
 	b := bufio.NewReader(os.Stdin)
 
