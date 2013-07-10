@@ -8,6 +8,10 @@ import (
 	"time"
 )
 
+const (
+	VERSION = "1.0"
+)
+
 // generic platform init, taking full advantage of all cpu's
 func PlatformInit() {
 	runtime.GOMAXPROCS(runtime.NumCPU())

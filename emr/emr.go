@@ -17,13 +17,14 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 )
 
 type Reducer interface {
-	Reduce(jobs <-chan ReduceJob, collector chan<- KeyValue)
+	Reduce(jobs <-chan ReduceJob, collector chan<- KeyValue, counters chan<- Count)
 }
 type KeyValue struct {
 	Key, Value string
@@ -32,9 +33,14 @@ type ReduceJob struct {
 	Key    string
 	Values <-chan string
 }
+type Count struct {
+	Group, Counter string
+	Amount         int
+}
 
 func RunStreamingReducer(r Reducer) {
 
+	counters := make(chan Count)
 	collector := make(chan KeyValue)
 	jobs := make(chan ReduceJob)
 
@@ -42,7 +48,7 @@ func RunStreamingReducer(r Reducer) {
 
 	wg.Add(1)
 	go func() {
-		r.Reduce(jobs, collector)
+		r.Reduce(jobs, collector, counters)
 		wg.Done()
 	}()
 
@@ -53,6 +59,18 @@ func RunStreamingReducer(r Reducer) {
 			defer out.Flush()
 			for kv := range collector {
 				out.WriteString(fmt.Sprintf("%s\t%s\n", kv.Key, kv.Value))
+			}
+		}()
+		wg.Done()
+	}()
+
+	wg.Add(1)
+	go func() {
+		func() {
+			for c := range counters {
+				c.Group = strings.Replace(c.Group, ",", "", -1)
+				c.Counter = strings.Replace(c.Counter, ",", "", -1)
+				os.Stderr.Write([]byte(fmt.Sprintf("reporter:counter:%s,%s,%d\n", c.Group, c.Counter, c.Amount)))
 			}
 		}()
 		wg.Done()
@@ -105,8 +123,7 @@ func RunStreamingReducer(r Reducer) {
 type Flow struct {
 	IsSpot             bool
 	Auth               aws.Auth
-	Mapper, Reducer    tool.Interface
-	Input, Output      string
+	Steps              []Step
 	Instances          int
 	MasterInstanceType string
 	MasterSpotPrice    float64
@@ -117,6 +134,13 @@ type Flow struct {
 	KeyName            string
 }
 
+type Step struct {
+	Name            string
+	Inputs          []string
+	Output          string
+	Mapper, Reducer tool.Interface
+}
+
 func isNull(x string, s string) {
 	if len(s) == 0 {
 		panic("zero-length string: " + x)
@@ -124,8 +148,17 @@ func isNull(x string, s string) {
 }
 
 func validate(f Flow) {
-	isNull("Input", f.Input)
-	isNull("Output", f.Output)
+
+	for _, s := range f.Steps {
+		for _, i := range s.Inputs {
+			isNull("Input", i)
+		}
+		isNull("Output", s.Output)
+		if strings.Contains(s.Name, " ") {
+			panic("step name can't contain spaces")
+		}
+	}
+
 	isNull("MasterInstanceType", f.MasterInstanceType)
 	isNull("SlaveInstanceType", f.SlaveInstanceType)
 	isNull("ScriptBucket", f.ScriptBucket)
@@ -137,15 +170,9 @@ func Run(flow Flow) {
 
 	validate(flow)
 
-	id := fmt.Sprintf("%s-%s_%s_%s", flow.Mapper.Name(), flow.Reducer.Name(), time.Now().UTC().Format("20060102T150405Z"), uuid.New()[:4])
+	id := fmt.Sprintf("%s-%s_%s_%s", flow.Steps[0].Mapper.Name(), flow.Steps[0].Reducer.Name(), time.Now().UTC().Format("20060102T150405Z"), uuid.New()[:4])
 
 	ss3 := s3.GetDefault(flow.Auth)
-
-	mapperObject := s3.Object{Bucket: flow.ScriptBucket, Key: "mapper/" + id}
-	reducerObject := s3.Object{Bucket: flow.ScriptBucket, Key: "reducer/" + id}
-
-	check(ss3.PutObject(s3.PutObjectRequest{Object: mapperObject, ContentType: "application/octet-stream", Data: []byte(createScript(flow.Mapper))}))
-	check(ss3.PutObject(s3.PutObjectRequest{Object: reducerObject, ContentType: "application/octet-stream", Data: []byte(createScript(flow.Reducer))}))
 
 	v := make(url.Values)
 
@@ -154,12 +181,6 @@ func Run(flow Flow) {
 	v.Set("Name", id)
 	v.Set("AmiVersion", "latest")
 	v.Set("LogUri", fmt.Sprintf("s3n://%s/%s", flow.LogBucket, id))
-
-	if !flow.IsSpot {
-		v.Set("Instances.MasterInstanceType", flow.MasterInstanceType)
-		v.Set("Instances.SlaveInstanceType", flow.SlaveInstanceType)
-		v.Set("Instances.InstanceCount", fmt.Sprintf("%d", flow.Instances))
-	}
 
 	v.Set("Instances.Ec2KeyName", flow.KeyName)
 	v.Set("Instances.Placement.AvailabilityZone", "us-east-1d")
@@ -178,6 +199,10 @@ func Run(flow Flow) {
 		v.Set("Instances.InstanceGroups.member.2.BidPrice", fmt.Sprintf("%.3f", flow.SlaveSpotPrice))
 		v.Set("Instances.InstanceGroups.member.2.InstanceType", flow.SlaveInstanceType)
 		v.Set("Instances.InstanceGroups.member.2.InstanceCount", fmt.Sprintf("%d", flow.Instances))
+	} else {
+		v.Set("Instances.MasterInstanceType", flow.MasterInstanceType)
+		v.Set("Instances.SlaveInstanceType", flow.SlaveInstanceType)
+		v.Set("Instances.InstanceCount", fmt.Sprintf("%d", flow.Instances))
 	}
 
 	v.Set("Steps.member.1.Name", "debugging")
@@ -185,20 +210,55 @@ func Run(flow Flow) {
 	v.Set("Steps.member.1.HadoopJarStep.Jar", "s3://elasticmapreduce/libs/script-runner/script-runner.jar")
 	v.Set("Steps.member.1.HadoopJarStep.Args.member.1", "s3://elasticmapreduce/libs/state-pusher/0.1/fetch")
 
-	v.Set("Steps.member.2.Name", "streaming")
-	v.Set("Steps.member.2.ActionOnFailure", "TERMINATE_JOB_FLOW")
-	v.Set("Steps.member.2.HadoopJarStep.Jar", "/home/hadoop/contrib/streaming/hadoop-streaming.jar")
-	v.Set("Steps.member.2.HadoopJarStep.Args.member.1", "-input")
-	v.Set("Steps.member.2.HadoopJarStep.Args.member.2", flow.Input)
-	v.Set("Steps.member.2.HadoopJarStep.Args.member.3", "-output")
-	v.Set("Steps.member.2.HadoopJarStep.Args.member.4", flow.Output)
-	v.Set("Steps.member.2.HadoopJarStep.Args.member.5", "-mapper")
-	v.Set("Steps.member.2.HadoopJarStep.Args.member.6", toUrl(mapperObject))
-	v.Set("Steps.member.2.HadoopJarStep.Args.member.7", "-reducer")
-	v.Set("Steps.member.2.HadoopJarStep.Args.member.8", toUrl(reducerObject))
+	for i, step := range flow.Steps {
 
-	for k, _ := range v {
-		fmt.Printf("%50s: %s\n", k, v.Get(k))
+		n := i + 2
+
+		id := uuid.New()
+
+		mapperObject := s3.Object{Bucket: flow.ScriptBucket, Key: "mapper/" + id}
+		reducerObject := s3.Object{Bucket: flow.ScriptBucket, Key: "reducer/" + id}
+
+		check(ss3.PutObject(s3.PutObjectRequest{Object: mapperObject, ContentType: "application/octet-stream", Data: []byte(createScript(step.Mapper))}))
+		check(ss3.PutObject(s3.PutObjectRequest{Object: reducerObject, ContentType: "application/octet-stream", Data: []byte(createScript(step.Reducer))}))
+
+		{
+			v.Set(fmt.Sprintf("Steps.member.%d.Name", n), step.Name)
+			v.Set(fmt.Sprintf("Steps.member.%d.ActionOnFailure", n), "TERMINATE_JOB_FLOW")
+			v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Jar", n), "/home/hadoop/contrib/streaming/hadoop-streaming.jar")
+
+			i := func() func() int {
+				i := 0
+				return func() int {
+					i++
+					return i
+				}
+			}()
+
+			for _, s := range step.Inputs {
+				v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), "-input")
+				v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), s)
+			}
+
+			v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), "-output")
+			v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), step.Output)
+			v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), "-mapper")
+			v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), toUrl(mapperObject))
+			v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), "-reducer")
+			v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), toUrl(reducerObject))
+		}
+
+	}
+
+	{
+		var keys []string
+		for k, _ := range v {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			fmt.Printf("%s: %s\n", k, v.Get(k))
+		}
 	}
 
 	u := createSignedURL(flow.Auth, v)
@@ -217,14 +277,14 @@ func createSignedURL(auth aws.Auth, v url.Values) string {
 
 	var lines []string
 
-	a := func(s string) {
+	add := func(s string) {
 		lines = append(lines, s)
 	}
 
-	a("GET")
-	a("elasticmapreduce.amazonaws.com")
-	a("/")
-	a(v.Encode())
+	add("GET")
+	add("elasticmapreduce.amazonaws.com")
+	add("/")
+	add(v.Encode())
 
 	str := strings.Join(lines, "\n")
 
@@ -235,8 +295,6 @@ func createSignedURL(auth aws.Auth, v url.Values) string {
 }
 
 func debugReq(u string) {
-	fmt.Printf("api call --- %s\n", u)
-
 	resp, err := http.Get(u)
 	check(err)
 	defer resp.Body.Close()
