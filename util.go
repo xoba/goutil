@@ -2,9 +2,13 @@ package goutil
 
 import (
 	"bytes"
+	"encoding/base64"
+	"fmt"
 	"io"
 	"math/rand"
+	"net/http"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -109,4 +113,61 @@ func (b BufferReaderFact) Len() uint64 {
 func (b BufferReaderFact) CreateReader() (io.ReadCloser, error) {
 	buf := bytes.NewBuffer(b.Buffer)
 	return BufferReader{buf}, nil
+}
+
+type HttpAuthMux struct {
+	realm     string
+	expecting map[string]string
+	mux       *http.ServeMux
+}
+
+func NewHttpAuthMux(realm string) *HttpAuthMux {
+	return &HttpAuthMux{realm: realm, mux: http.NewServeMux(), expecting: make(map[string]string)}
+}
+
+func (a *HttpAuthMux) Add(user, password string) {
+	var dst bytes.Buffer
+	enc := base64.NewEncoder(base64.StdEncoding, &dst)
+
+	str := user + ":" + password
+
+	enc.Write([]byte(str))
+	enc.Close()
+
+	a.expecting[string(dst.Bytes())] = str
+}
+
+func (a *HttpAuthMux) Authorized(r *http.Request) bool {
+
+	auth := r.Header.Get("Authorization")
+
+	parts := strings.Split(auth, " ")
+
+	if len(parts) == 2 {
+		_, ok := a.expecting[parts[1]]
+		return ok
+	}
+
+	return false
+}
+
+func (s *HttpAuthMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+
+	if s.Authorized(r) {
+		s.mux.ServeHTTP(w, r)
+	} else {
+		w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Basic realm="%s"`, s.realm))
+		w.Header().Set("Content-Type", `text/plain`)
+		w.WriteHeader(401)
+		fmt.Fprintf(w, "please authenticate!\n")
+	}
+
+}
+
+func (s *HttpAuthMux) Handle(pattern string, handler http.Handler) {
+	s.mux.Handle(pattern, handler)
+}
+
+func (s *HttpAuthMux) HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) {
+	s.mux.HandleFunc(pattern, handler)
 }

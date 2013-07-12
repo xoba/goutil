@@ -9,7 +9,24 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"time"
 )
+
+type Build struct {
+	Version string
+	Commit  string
+	BuildId string
+	Status  string
+	Built   time.Time
+}
+
+const (
+	BUILT_FORMAT = "2006-01-02T15:04:05Z"
+)
+
+func (b Build) FormatBuilt() string {
+	return b.Built.Format(BUILT_FORMAT)
+}
 
 type Interface interface {
 	Name() string
@@ -41,13 +58,18 @@ func SummarizeFlags(fs *flag.FlagSet) {
 		}
 		fmt.Println(")")
 	})
-
 }
 
-func Run() {
+func Run(b Build) {
 
-	if len(os.Args) < 2 {
-		fmt.Println("nothing to run, see options; -help shows more:\n")
+	var hidden, version bool
+	flag.BoolVar(&version, "version", false, "detailed version information")
+	flag.BoolVar(&hidden, "hidden", false, "show hidden tools")
+	flag.Parse()
+
+	if len(os.Args) < 2 || hidden {
+
+		fmt.Printf("v.%s: nothing to run, see options; -help shows more:\n\n", b.Version)
 
 		var names []string
 		for k, _ := range tools {
@@ -77,7 +99,9 @@ func Run() {
 				hasTags = true
 			}
 
-			rows = append(rows, row)
+			if hidden || !strings.Contains(row["tags"], "hidden") {
+				rows = append(rows, row)
+			}
 		}
 
 		cols := strings.Split("command,description,code", ",")
@@ -90,15 +114,63 @@ func Run() {
 
 	} else {
 
-		name := os.Args[1]
-		t, ok := tools[name]
-		if !ok {
-			fmt.Printf("no such tool: %s\n", name)
-			os.Exit(1)
+		if version {
+
+			p := KeyValuePrinter{values: make(map[string]string)}
+
+			p.Line("version", b.Version)
+			p.Line("commit", b.Commit)
+			p.Line("build id", b.BuildId)
+			p.Line("built", fmt.Sprintf("%s (%v ago)", b.Built.Format("2006-01-02T15:04:05Z"), time.Now().Sub(b.Built)))
+			p.Line("status", b.Status)
+
+			p.Print()
+
+		} else {
+			name := os.Args[1]
+			t, ok := tools[name]
+			if !ok {
+				fmt.Printf("no such tool: %s\n", name)
+				os.Exit(1)
+			}
+
+			t.Run(os.Args[2:])
+		}
+	}
+}
+
+type KeyValuePrinter struct {
+	keys   []string
+	values map[string]string
+}
+
+func (p *KeyValuePrinter) Line(k, v string) {
+	p.keys = append(p.keys, k)
+	p.values[k] = v
+}
+func (p *KeyValuePrinter) Print() {
+	var max int
+	for _, k := range p.keys {
+		if len(k) > max {
+			max = len(k)
 		}
 
-		t.Run(os.Args[2:])
 	}
+	for _, k := range p.keys {
+		v := p.values[k]
+		fmt.Printf("%-"+fmt.Sprintf("%d", max+1)+"s ", k+":")
+
+		for i, x := range strings.Split(v, "\n") {
+			if i > 0 {
+				for j := 0; j < max+2; j++ {
+					fmt.Print(" ")
+				}
+			}
+			fmt.Printf("%s\n", x)
+		}
+
+	}
+
 }
 
 var tools map[string]Interface = make(map[string]Interface)

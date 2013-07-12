@@ -30,9 +30,11 @@ type Mapper interface {
 type Reducer interface {
 	Reduce(jobs <-chan ReduceJob, collector chan<- KeyValue, counters chan<- Count)
 }
+
 type KeyValue struct {
 	Key, Value string
 }
+
 type ReduceJob struct {
 	Key    string
 	Values <-chan string
@@ -40,24 +42,6 @@ type ReduceJob struct {
 type Count struct {
 	Group, Counter string
 	Amount         int
-}
-
-func runOutput(wg *sync.WaitGroup, collector chan KeyValue) {
-	defer wg.Done()
-	out := bufio.NewWriter(os.Stdout)
-	defer out.Flush()
-	for kv := range collector {
-		out.WriteString(fmt.Sprintf("%s\t%s\n", kv.Key, kv.Value))
-	}
-}
-
-func runCounters(wg *sync.WaitGroup, counters chan Count) {
-	defer wg.Done()
-	for c := range counters {
-		c.Group = strings.Replace(c.Group, ",", "", -1)
-		c.Counter = strings.Replace(c.Counter, ",", "", -1)
-		os.Stderr.Write([]byte(fmt.Sprintf("reporter:counter:%s,%s,%d\n", c.Group, c.Counter, c.Amount)))
-	}
 }
 
 func RunStreamingMapper(m Mapper) {
@@ -164,7 +148,10 @@ func RunStreamingReducer(r Reducer) {
 
 	}
 
-	close(values)
+	if values != nil {
+		close(values)
+	}
+
 	close(jobs)
 
 	wg.Wait()
@@ -189,32 +176,8 @@ type Step struct {
 	Name            string
 	Inputs          []string
 	Output          string
+	Reducers        int
 	Mapper, Reducer tool.Interface
-}
-
-func isNull(x string, s string) {
-	if len(s) == 0 {
-		panic("zero-length string: " + x)
-	}
-}
-
-func validate(f Flow) {
-
-	for _, s := range f.Steps {
-		for _, i := range s.Inputs {
-			isNull("Input", i)
-		}
-		isNull("Output", s.Output)
-		if strings.Contains(s.Name, " ") {
-			panic("step name can't contain spaces")
-		}
-	}
-
-	isNull("MasterInstanceType", f.MasterInstanceType)
-	isNull("SlaveInstanceType", f.SlaveInstanceType)
-	isNull("ScriptBucket", f.ScriptBucket)
-	isNull("LogBucket", f.LogBucket)
-	isNull("KeyName", f.KeyName)
 }
 
 func Run(flow Flow) {
@@ -286,6 +249,11 @@ func Run(flow Flow) {
 				}
 			}()
 
+			if step.Reducers > 0 {
+				v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), "-D")
+				v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), fmt.Sprintf("mapred.reduce.tasks=%d", step.Reducers))
+			}
+
 			for _, s := range step.Inputs {
 				v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), "-input")
 				v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), s)
@@ -314,8 +282,57 @@ func Run(flow Flow) {
 
 	u := createSignedURL(flow.Auth, v)
 
-	debugReq(u)
+	fmt.Print(string(debugReq(u)))
 
+}
+
+func runOutput(wg *sync.WaitGroup, collector chan KeyValue) {
+	defer wg.Done()
+	out := bufio.NewWriter(os.Stdout)
+	defer out.Flush()
+	for kv := range collector {
+		out.WriteString(fmt.Sprintf("%s\t%s\n", kv.Key, kv.Value))
+	}
+}
+
+func runCounters(wg *sync.WaitGroup, counters chan Count) {
+	defer wg.Done()
+	for c := range counters {
+		c.Group = strings.Replace(c.Group, ",", "", -1)
+		c.Counter = strings.Replace(c.Counter, ",", "", -1)
+		if len(c.Group) == 0 {
+			c.Group = "global"
+		}
+		if len(c.Counter) == 0 {
+			c.Counter = "job"
+		}
+		os.Stderr.Write([]byte(fmt.Sprintf("reporter:counter:%s,%s,%d\n", c.Group, c.Counter, c.Amount)))
+	}
+}
+
+func isNull(x string, s string) {
+	if len(s) == 0 {
+		panic("zero-length string: " + x)
+	}
+}
+
+func validate(f Flow) {
+
+	for _, s := range f.Steps {
+		for _, i := range s.Inputs {
+			isNull("Input", i)
+		}
+		isNull("Output", s.Output)
+		if strings.Contains(s.Name, " ") {
+			panic("step name can't contain spaces")
+		}
+	}
+
+	isNull("MasterInstanceType", f.MasterInstanceType)
+	isNull("SlaveInstanceType", f.SlaveInstanceType)
+	isNull("ScriptBucket", f.ScriptBucket)
+	isNull("LogBucket", f.LogBucket)
+	isNull("KeyName", f.KeyName)
 }
 
 func createSignedURL(auth aws.Auth, v url.Values) string {
@@ -345,16 +362,19 @@ func createSignedURL(auth aws.Auth, v url.Values) string {
 
 }
 
-func debugReq(u string) {
+func debugReq(u string) []byte {
 	resp, err := http.Get(u)
 	check(err)
 	defer resp.Body.Close()
 
-	fmt.Printf("status: %s\n", resp.Status)
-	fmt.Printf("header: %v\n", resp.Header)
+	if resp.Status != "200 OK" {
+		fmt.Printf("status: %s\n", resp.Status)
+		fmt.Printf("header: %v\n", resp.Header)
+	}
 
-	io.Copy(os.Stdout, resp.Body)
-
+	var buf bytes.Buffer
+	io.Copy(&buf, resp.Body)
+	return buf.Bytes()
 }
 
 const (
@@ -435,4 +455,127 @@ func check(e error) {
 	if e != nil {
 		panic(e)
 	}
+}
+
+func NewReduceTool(r Reducer, name, description string) *ReduceTool {
+	return &ReduceTool{
+		reducer:     r,
+		name:        name,
+		description: description,
+	}
+}
+func NewHiddenReduceTool(r Reducer, name, description string) *ReduceTool {
+	return &ReduceTool{
+		reducer:     r,
+		name:        name,
+		description: description,
+		hidden:      true,
+	}
+}
+
+func NewMapTool(m Mapper, name, description string) *MapTool {
+	return &MapTool{
+		mapper:      m,
+		name:        name,
+		description: description,
+	}
+}
+func NewHiddenMapTool(m Mapper, name, description string) *MapTool {
+	return &MapTool{
+		mapper:      m,
+		name:        name,
+		description: description,
+		hidden:      true,
+	}
+}
+
+type MapTool struct {
+	mapper      Mapper
+	name        string
+	description string
+	hidden      bool
+}
+
+func (t *MapTool) MarshalJSON() ([]byte, error) {
+	return marshal(t)
+}
+func (t *MapTool) Tags() []string {
+	if t.hidden {
+		return []string{"hidden"}
+	} else {
+		return []string{}
+	}
+}
+func (m *MapTool) Name() string {
+	return m.name
+}
+func (m *MapTool) String() string {
+	return m.Name()
+}
+func (m *MapTool) Description() string {
+	return m.description
+}
+
+func (m *MapTool) Run(args []string) {
+	RunStreamingMapper(m.mapper)
+}
+
+type ReduceTool struct {
+	reducer     Reducer
+	name        string
+	description string
+	hidden      bool
+}
+
+func (t *ReduceTool) MarshalJSON() ([]byte, error) {
+	return marshal(t)
+}
+func (t *ReduceTool) Tags() []string {
+	if t.hidden {
+		return []string{"hidden"}
+	} else {
+		return []string{}
+	}
+}
+func (m *ReduceTool) Name() string {
+	return m.name
+}
+func (m *ReduceTool) String() string {
+	return m.Name()
+}
+func (m *ReduceTool) Description() string {
+	return m.description
+}
+
+func (m *ReduceTool) Run(args []string) {
+	RunStreamingReducer(m.reducer)
+}
+
+func marshal(i fmt.Stringer) ([]byte, error) {
+	return []byte(fmt.Sprintf(`{"type":"%T"}`, i)), nil
+}
+
+type IdentityMapperTool struct {
+	Id      string
+	Taglist []string
+}
+
+func (t *IdentityMapperTool) MarshalJSON() ([]byte, error) {
+	return marshal(t)
+}
+
+func (t *IdentityMapperTool) Tags() []string {
+	return t.Taglist
+}
+func (m *IdentityMapperTool) String() string {
+	return m.Name()
+}
+func (m *IdentityMapperTool) Name() string {
+	return m.Id
+}
+func (m *IdentityMapperTool) Description() string {
+	return "identity mapper"
+}
+func (m *IdentityMapperTool) Run(args []string) {
+	io.Copy(os.Stdout, os.Stdin)
 }
