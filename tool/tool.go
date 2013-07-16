@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path"
 	"reflect"
 	"sort"
 	"strings"
@@ -14,7 +15,8 @@ import (
 
 type Build struct {
 	Version string
-	Commit  string
+	Commit  string // the commit id
+	Url     string // identifies the commit (like a github url)
 	BuildId string
 	Status  string
 	Built   time.Time
@@ -63,11 +65,20 @@ func SummarizeFlags(fs *flag.FlagSet) {
 func Run(b Build) {
 
 	var hidden, version bool
+	var pathUrl string
+
 	flag.BoolVar(&version, "version", false, "detailed version information")
 	flag.BoolVar(&hidden, "hidden", false, "show hidden tools")
+	flag.StringVar(&pathUrl, "pathurl", "", "adds path onto build url")
 	flag.Parse()
 
-	if len(os.Args) < 2 || hidden {
+	switch {
+
+	case len(pathUrl) > 0:
+		p := path.Clean("/" + pathUrl)
+		fmt.Printf("%s%s\n", b.Url, p)
+
+	case len(os.Args) < 2 || hidden:
 
 		fmt.Printf("v.%s: nothing to run, see options; -help shows more:\n\n", b.Version)
 
@@ -112,7 +123,7 @@ func Run(b Build) {
 
 		fmt.Println(FormatTextTable(false, " ", cols, rows))
 
-	} else {
+	default:
 
 		if version {
 
@@ -120,6 +131,7 @@ func Run(b Build) {
 
 			p.Line("version", b.Version)
 			p.Line("commit", b.Commit)
+			p.Line("url", b.Url)
 			p.Line("build id", b.BuildId)
 			p.Line("built", fmt.Sprintf("%s (%v ago)", b.Built.Format("2006-01-02T15:04:05Z"), time.Now().Sub(b.Built)))
 			p.Line("status", b.Status)

@@ -18,17 +18,43 @@ import (
 	"net/url"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
 
+type Output struct {
+	Collector chan<- KeyValue
+	Counters  chan<- Count
+}
+
+type Context struct {
+	Vars map[string]string
+}
+
+func (o *Output) Close() {
+	close(o.Collector)
+	close(o.Counters)
+}
+
+type MapContext struct {
+	Input <-chan KeyValue
+	Output
+	Context
+}
+type ReduceContext struct {
+	Input <-chan ReduceJob
+	Output
+	Context
+}
+
 type Mapper interface {
-	Map(items <-chan KeyValue, collector chan<- KeyValue, counters chan<- Count)
+	Map(ctx MapContext)
 }
 
 type Reducer interface {
-	Reduce(jobs <-chan ReduceJob, collector chan<- KeyValue, counters chan<- Count)
+	Reduce(ctx ReduceContext)
 }
 
 type KeyValue struct {
@@ -57,7 +83,13 @@ func RunStreamingMapper(m Mapper) {
 
 	wg.Add(1)
 	go func() {
-		m.Map(items, collector, counters)
+		m.Map(MapContext{
+			Input: items,
+			Output: Output{
+				Counters:  counters,
+				Collector: collector,
+			},
+		})
 		wg.Done()
 	}()
 
@@ -101,7 +133,13 @@ func RunStreamingReducer(r Reducer) {
 
 	wg.Add(1)
 	go func() {
-		r.Reduce(jobs, collector, counters)
+		r.Reduce(ReduceContext{
+			Input: jobs,
+			Output: Output{
+				Counters:  counters,
+				Collector: collector,
+			},
+		})
 		wg.Done()
 	}()
 
@@ -176,8 +214,9 @@ type Step struct {
 	Name            string
 	Inputs          []string
 	Output          string
-	Reducers        int
+	Reducers        int `json:",omitempty"`
 	Mapper, Reducer tool.Interface
+	Context
 }
 
 func Run(flow Flow) {
@@ -265,6 +304,11 @@ func Run(flow Flow) {
 			v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), toUrl(mapperObject))
 			v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), "-reducer")
 			v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), toUrl(reducerObject))
+
+			for k, x := range step.Vars {
+				v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), "-cmdenv")
+				v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), fmt.Sprintf("%s=%s", k, x))
+			}
 		}
 
 	}
@@ -578,4 +622,51 @@ func (m *IdentityMapperTool) Description() string {
 }
 func (m *IdentityMapperTool) Run(args []string) {
 	io.Copy(os.Stdout, os.Stdin)
+}
+
+type IdentityReducerTool struct {
+	Id      string
+	Taglist []string
+}
+
+func (t *IdentityReducerTool) MarshalJSON() ([]byte, error) {
+	return marshal(t)
+}
+
+func (t *IdentityReducerTool) Tags() []string {
+	return t.Taglist
+}
+func (m *IdentityReducerTool) String() string {
+	return m.Name()
+}
+func (m *IdentityReducerTool) Name() string {
+	return m.Id
+}
+func (m *IdentityReducerTool) Description() string {
+	return "identity reducer"
+}
+func (m *IdentityReducerTool) Run(args []string) {
+	io.Copy(os.Stdout, os.Stdin)
+}
+
+type IntegerSumReducer struct {
+}
+
+func (s *IntegerSumReducer) Reduce(ctx ReduceContext) {
+	defer ctx.Output.Close()
+
+	m := make(map[string]int)
+
+	for j := range ctx.Input {
+		for v := range j.Values {
+			i, err := strconv.ParseInt(v, 10, 64)
+			if err == nil {
+				m[j.Key] += int(i)
+			}
+		}
+	}
+
+	for k, v := range m {
+		ctx.Collector <- KeyValue{Key: k, Value: fmt.Sprintf("%d", v)}
+	}
 }

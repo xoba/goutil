@@ -52,10 +52,8 @@ func (m *ShowFlow) Run(args []string) {
 
 		cmd.Dir = "/tmp"
 
-		fmt.Println(cmd.Path)
-		fmt.Printf("%#v\n", cmd.Args)
-
 		cmd.Start()
+
 	} else {
 		fmt.Println("# master dns not available")
 	}
