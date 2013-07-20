@@ -2,6 +2,7 @@ package emr
 
 import (
 	"code.google.com/p/go-uuid/uuid"
+	"encoding/json"
 	"encoding/xml"
 	"flag"
 	"fmt"
@@ -31,17 +32,15 @@ func (m *ShowFlow) Run(args []string) {
 	flags.StringVar(&flow, "id", "", "the job flow to debug")
 	flags.Parse(args)
 
-	v := make(url.Values)
+	r := FetchFlow(m.Auth, flow)
 
-	v.Set("Action", "DescribeJobFlows")
-	v.Set("JobFlowIds.member.1", flow)
+	if buf, err := json.MarshalIndent(r, "", "  "); err == nil {
+		fmt.Println(string(buf))
 
-	u := createSignedURL(m.Auth, v)
-
-	res := debugReq(u)
-
-	var r Response
-	xml.Unmarshal(res, &r)
+		for i, s := range r.Steps {
+			fmt.Printf("step %d: %v\n", i, s.Output())
+		}
+	}
 
 	if len(r.MasterDNS) > 0 {
 
@@ -54,12 +53,65 @@ func (m *ShowFlow) Run(args []string) {
 
 		cmd.Start()
 
-	} else {
-		fmt.Println("# master dns not available")
 	}
 
 }
 
-type Response struct {
-	MasterDNS string `xml:"DescribeJobFlowsResult>JobFlows>member>Instances>MasterPublicDnsName"`
+func FetchFlow(a aws.Auth, flow string) *FlowsResponse {
+	v := make(url.Values)
+
+	v.Set("Action", "DescribeJobFlows")
+	v.Set("JobFlowIds.member.1", flow)
+
+	u := createSignedURL(a, v)
+
+	res := debugReq(u)
+
+	var r FlowsResponse
+
+	xml.Unmarshal(res, &r)
+
+	return &r
+}
+
+type StepMember struct {
+	Name string   `xml:"StepConfig>Name"`
+	Args []string `xml:"StepConfig>HadoopJarStep>Args>member"`
+}
+
+type StepOutput struct {
+	Bucket string
+	Prefix string
+}
+
+func (s *StepMember) Output() *StepOutput {
+	var next bool
+	for _, x := range s.Args {
+		if next {
+			u, err := url.Parse(x)
+			if err != nil {
+				return nil
+			}
+			return &StepOutput{Bucket: u.Host, Prefix: u.Path[1:]}
+		}
+		if x == "-output" {
+			next = true
+		}
+	}
+	return nil
+}
+
+type FlowsResponse struct {
+	State     string       `xml:"DescribeJobFlowsResult>JobFlows>member>ExecutionStatusDetail>State"`
+	MasterDNS string       `xml:"DescribeJobFlowsResult>JobFlows>member>Instances>MasterPublicDnsName"`
+	Steps     []StepMember `xml:"DescribeJobFlowsResult>JobFlows>member>Steps>member"`
+}
+
+func (f *FlowsResponse) GetStep(name string) *StepMember {
+	for _, x := range f.Steps {
+		if x.Name == name {
+			return &x
+		}
+	}
+	return nil
 }

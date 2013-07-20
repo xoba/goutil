@@ -30,7 +30,7 @@ type Output struct {
 }
 
 type Context struct {
-	Vars map[string]string
+	Vars map[string]string `json:",omitempty"`
 }
 
 func (o *Output) Close() {
@@ -109,17 +109,21 @@ func RunStreamingMapper(m Mapper) {
 
 		line = line[:len(line)-1]
 
-		i := strings.Index(line, "\t")
-
-		if i >= 0 {
-			key := line[:i]
-			value := line[i+1:]
-			items <- KeyValue{Key: key, Value: value}
-		} else {
-			items <- KeyValue{Key: line}
-		}
+		items <- ParseLine(line)
 	}
 
+}
+
+func ParseLine(line string) KeyValue {
+	i := strings.Index(line, "\t")
+
+	if i >= 0 {
+		key := line[:i]
+		value := line[i+1:]
+		return KeyValue{Key: key, Value: value}
+	} else {
+		return KeyValue{Key: line}
+	}
 }
 
 func RunStreamingReducer(r Reducer) {
@@ -214,7 +218,8 @@ type Step struct {
 	Name            string
 	Inputs          []string
 	Output          string
-	Reducers        int `json:",omitempty"`
+	Reducers        int           `json:",omitempty"`
+	Timeout         time.Duration `json:",omitempty"`
 	Mapper, Reducer tool.Interface
 	Context
 }
@@ -291,6 +296,12 @@ func Run(flow Flow) {
 			if step.Reducers > 0 {
 				v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), "-D")
 				v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), fmt.Sprintf("mapred.reduce.tasks=%d", step.Reducers))
+			}
+
+			if step.Timeout > 0 {
+				v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), "-D")
+				v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), fmt.Sprintf("mapred.task.timeout=%d", step.Timeout.Nanoseconds()/1000000))
+
 			}
 
 			for _, s := range step.Inputs {
