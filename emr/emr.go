@@ -221,6 +221,7 @@ type Step struct {
 	Reducers        int           `json:",omitempty"`
 	Timeout         time.Duration `json:",omitempty"`
 	Mapper, Reducer tool.Interface
+	Compress        bool
 	Context
 }
 
@@ -302,6 +303,11 @@ func Run(flow Flow) {
 				v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), "-D")
 				v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), fmt.Sprintf("mapred.task.timeout=%d", step.Timeout.Nanoseconds()/1000000))
 
+			}
+
+			if step.Compress {
+				v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), "-jobconf")
+				v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), "mapred.output.compress=true")
 			}
 
 			for _, s := range step.Inputs {
@@ -632,7 +638,29 @@ func (m *IdentityMapperTool) Description() string {
 	return "identity mapper"
 }
 func (m *IdentityMapperTool) Run(args []string) {
-	io.Copy(os.Stdout, os.Stdin)
+	bufferedCopy()
+}
+
+type IdentityMapper struct {
+}
+
+func (m *IdentityMapper) Map(ctx MapContext) {
+	defer ctx.Close()
+	for kv := range ctx.Input {
+		ctx.Collector <- kv
+	}
+}
+
+type IdentityReducer struct {
+}
+
+func (s *IdentityReducer) Reduce(ctx ReduceContext) {
+	defer ctx.Close()
+	for j := range ctx.Input {
+		for v := range j.Values {
+			ctx.Collector <- KeyValue{j.Key, v}
+		}
+	}
 }
 
 type IdentityReducerTool struct {
@@ -657,14 +685,21 @@ func (m *IdentityReducerTool) Description() string {
 	return "identity reducer"
 }
 func (m *IdentityReducerTool) Run(args []string) {
-	io.Copy(os.Stdout, os.Stdin)
+	bufferedCopy()
+}
+
+func bufferedCopy() {
+	r := bufio.NewReader(os.Stdin)
+	w := bufio.NewWriter(os.Stdout)
+	defer w.Flush()
+	io.Copy(w, r)
 }
 
 type IntegerSumReducer struct {
 }
 
 func (s *IntegerSumReducer) Reduce(ctx ReduceContext) {
-	defer ctx.Output.Close()
+	defer ctx.Close()
 
 	m := make(map[string]int)
 
@@ -680,4 +715,24 @@ func (s *IntegerSumReducer) Reduce(ctx ReduceContext) {
 	for k, v := range m {
 		ctx.Collector <- KeyValue{Key: k, Value: fmt.Sprintf("%d", v)}
 	}
+}
+
+func tick(ch chan<- Count, count int) {
+	ch <- Count{Group: "ticks", Counter: fmt.Sprintf("minutes-%03d", count), Amount: 1}
+}
+
+func TicksDone(ch chan<- Count) {
+	ch <- Count{Group: "ticks", Counter: "done", Amount: 1}
+}
+
+func StartTicker(ch chan<- Count) {
+	tick(ch, 0)
+	go func() {
+		var minutes int
+		c := time.Tick(1 * time.Minute)
+		for _ = range c {
+			minutes++
+			tick(ch, minutes)
+		}
+	}()
 }

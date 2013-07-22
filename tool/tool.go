@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"reflect"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -129,7 +130,7 @@ func Run(b Build) {
 
 			p := KeyValuePrinter{values: make(map[string]string)}
 
-			p.Line("version", b.Version)
+			p.Line("version", fmt.Sprintf("%s / go %s", b.Version, runtime.Version()))
 			p.Line("commit", b.Commit)
 			p.Line("url", b.Url)
 			p.Line("build id", b.BuildId)
