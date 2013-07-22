@@ -114,9 +114,16 @@ func RunStreamingMapper(m Mapper) {
 
 }
 
+func ReassembleLine(kv KeyValue) string {
+	if len(kv.Value) == 0 {
+		return fmt.Sprintf("%s", kv.Key)
+	} else {
+		return fmt.Sprintf("%s\t%s", kv.Key, kv.Value)
+	}
+}
+
 func ParseLine(line string) KeyValue {
 	i := strings.Index(line, "\t")
-
 	if i >= 0 {
 		key := line[:i]
 		value := line[i+1:]
@@ -332,7 +339,7 @@ func Run(flow Flow) {
 
 	{
 		var keys []string
-		for k, _ := range v {
+		for k := range v {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)

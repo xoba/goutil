@@ -84,7 +84,7 @@ func Run(b Build) {
 		fmt.Printf("v.%s: nothing to run, see options; -help shows more:\n\n", b.Version)
 
 		var names []string
-		for k, _ := range tools {
+		for k := range tools {
 			names = append(names, k)
 		}
 
@@ -108,11 +108,13 @@ func Run(b Build) {
 			if len(tags) > 0 {
 				sort.Strings(tags)
 				row["tags"] = strings.Join(tags, ", ")
-				hasTags = true
 			}
 
 			if hidden || !strings.Contains(row["tags"], "hidden") {
 				rows = append(rows, row)
+				if len(tags) > 0 {
+					hasTags = true
+				}
 			}
 		}
 
@@ -213,7 +215,7 @@ func (st *Sequence) Tags() (out []string) {
 			m[y] = true
 		}
 	}
-	for k, _ := range m {
+	for k := range m {
 		out = append(out, k)
 	}
 	sort.Strings(out)
