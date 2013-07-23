@@ -99,19 +99,13 @@ func RunStreamingMapper(m Mapper) {
 	wg.Add(1)
 	go runCounters(&wg, counters)
 
-	b := bufio.NewReader(os.Stdin)
-
-	for {
-		line, err := b.ReadString('\n')
-		if err != nil {
-			break
-		}
-
-		line = line[:len(line)-1]
-
-		items <- ParseLine(line)
+	scanner := bufio.NewScanner(os.Stdin)
+	for scanner.Scan() {
+		items <- ParseLine(scanner.Text())
 	}
-
+	if err := scanner.Err(); err != nil {
+		os.Exit(1)
+	}
 }
 
 func ReassembleLine(kv KeyValue) string {
@@ -160,19 +154,12 @@ func RunStreamingReducer(r Reducer) {
 	wg.Add(1)
 	go runCounters(&wg, counters)
 
-	b := bufio.NewReader(os.Stdin)
-
 	var lastKey *string
 	var values chan string
 
-	for {
-		line, err := b.ReadString('\n')
-		if err != nil {
-			break
-		}
-
-		line = line[:len(line)-1]
-
+	scanner := bufio.NewScanner(os.Stdin)
+	for scanner.Scan() {
+		line := scanner.Text()
 		i := strings.Index(line, "\t")
 
 		if i >= 0 {
@@ -195,6 +182,9 @@ func RunStreamingReducer(r Reducer) {
 			values <- value
 		}
 
+	}
+	if err := scanner.Err(); err != nil {
+		os.Exit(1)
 	}
 
 	if values != nil {
@@ -222,13 +212,14 @@ type Flow struct {
 }
 
 type Step struct {
-	Name            string
-	Inputs          []string
-	Output          string
-	Reducers        int           `json:",omitempty"`
-	Timeout         time.Duration `json:",omitempty"`
-	Mapper, Reducer tool.Interface
-	Compress        bool
+	Name               string
+	Inputs             []string
+	Output             string
+	Reducers           int           `json:",omitempty"`
+	Timeout            time.Duration `json:",omitempty"`
+	Mapper, Reducer    tool.Interface
+	Compress           bool `json:",omitempty"`
+	SortSecondKeyField bool `json:",omitempty"`
 	Context
 }
 
@@ -301,37 +292,44 @@ func Run(flow Flow) {
 				}
 			}()
 
+			arg := func(a string) {
+				v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), a)
+			}
+
+			pair := func(a, b string) {
+				arg(a)
+				arg(b)
+			}
+
 			if step.Reducers > 0 {
-				v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), "-D")
-				v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), fmt.Sprintf("mapred.reduce.tasks=%d", step.Reducers))
+				pair("-D", fmt.Sprintf("mapred.reduce.tasks=%d", step.Reducers))
 			}
 
 			if step.Timeout > 0 {
-				v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), "-D")
-				v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), fmt.Sprintf("mapred.task.timeout=%d", step.Timeout.Nanoseconds()/1000000))
+				pair("-D", fmt.Sprintf("mapred.task.timeout=%d", step.Timeout.Nanoseconds()/1000000))
 
+			}
+
+			if step.SortSecondKeyField {
+				pair("-D", "stream.num.map.output.key.fields=2")
+				pair("-D", "mapred.text.key.partitioner.options=-k1,1")
+				pair("-partitioner", "org.apache.hadoop.mapred.lib.KeyFieldBasedPartitioner")
 			}
 
 			if step.Compress {
-				v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), "-jobconf")
-				v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), "mapred.output.compress=true")
+				pair("-jobconf", "mapred.output.compress=true")
 			}
 
 			for _, s := range step.Inputs {
-				v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), "-input")
-				v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), s)
+				pair("-input", s)
 			}
 
-			v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), "-output")
-			v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), step.Output)
-			v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), "-mapper")
-			v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), toUrl(mapperObject))
-			v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), "-reducer")
-			v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), toUrl(reducerObject))
+			pair("-output", step.Output)
+			pair("-mapper", toUrl(mapperObject))
+			pair("-reducer", toUrl(reducerObject))
 
 			for k, x := range step.Vars {
-				v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), "-cmdenv")
-				v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Args.member.%d", n, i()), fmt.Sprintf("%s=%s", k, x))
+				pair("-cmdenv", fmt.Sprintf("%s=%s", k, x))
 			}
 		}
 
@@ -350,7 +348,7 @@ func Run(flow Flow) {
 
 	u := createSignedURL(flow.Auth, v)
 
-	fmt.Print(string(debugReq(u)))
+	fmt.Print(string(runReq(u)))
 
 }
 
@@ -420,17 +418,24 @@ func createSignedURL(auth aws.Auth, v url.Values) string {
 	add("GET")
 	add("elasticmapreduce.amazonaws.com")
 	add("/")
-	add(v.Encode())
+	add(encode(v))
 
 	str := strings.Join(lines, "\n")
 
 	v.Set("Signature", ghmac(auth.SecretKey, str))
 
-	return fmt.Sprintf("https://elasticmapreduce.amazonaws.com?%s", v.Encode())
+	return fmt.Sprintf("https://elasticmapreduce.amazonaws.com?%s", encode(v))
 
 }
 
-func debugReq(u string) []byte {
+// aws requires "space" to be mapped to "%20", not "+" like go's encoder.
+func encode(v url.Values) string {
+	e := v.Encode()
+	e = strings.Replace(e, "+", "%20", -1)
+	return e
+}
+
+func runReq(u string) []byte {
 	resp, err := http.Get(u)
 	check(err)
 	defer resp.Body.Close()
@@ -708,19 +713,15 @@ type IntegerSumReducer struct {
 func (s *IntegerSumReducer) Reduce(ctx ReduceContext) {
 	defer ctx.Close()
 
-	m := make(map[string]int)
-
 	for j := range ctx.Input {
+		var count int64
 		for v := range j.Values {
 			i, err := strconv.ParseInt(v, 10, 64)
 			if err == nil {
-				m[j.Key] += int(i)
+				count += i
 			}
 		}
-	}
-
-	for k, v := range m {
-		ctx.Collector <- KeyValue{Key: k, Value: fmt.Sprintf("%d", v)}
+		ctx.Collector <- KeyValue{Key: j.Key, Value: fmt.Sprintf("%d", count)}
 	}
 }
 

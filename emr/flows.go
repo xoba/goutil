@@ -65,7 +65,7 @@ func FetchFlow(a aws.Auth, flow string) *FlowsResponse {
 
 	u := createSignedURL(a, v)
 
-	res := debugReq(u)
+	res := runReq(u)
 
 	var r FlowsResponse
 
