@@ -33,6 +33,10 @@ type Context struct {
 	Vars map[string]string `json:",omitempty"`
 }
 
+func (c *Context) Fail() {
+	os.Exit(1)
+}
+
 func (o *Output) Close() {
 	close(o.Collector)
 	close(o.Counters)
@@ -219,6 +223,7 @@ type Step struct {
 	Timeout            time.Duration `json:",omitempty"`
 	Mapper, Reducer    tool.Interface
 	Compress           bool `json:",omitempty"`
+	CompressMapOutput  bool `json:",omitempty"`
 	SortSecondKeyField bool `json:",omitempty"`
 	Context
 }
@@ -299,6 +304,10 @@ func Run(flow Flow) {
 			pair := func(a, b string) {
 				arg(a)
 				arg(b)
+			}
+
+			if step.CompressMapOutput {
+				pair("-D", "mapred.compress.map.output=true")
 			}
 
 			if step.Reducers > 0 {
@@ -658,6 +667,10 @@ type IdentityMapper struct {
 
 func (m *IdentityMapper) Map(ctx MapContext) {
 	defer ctx.Close()
+
+	StartTicker(ctx.Counters)
+	defer TicksDone(ctx.Counters)
+
 	for kv := range ctx.Input {
 		ctx.Collector <- kv
 	}
@@ -668,6 +681,10 @@ type IdentityReducer struct {
 
 func (s *IdentityReducer) Reduce(ctx ReduceContext) {
 	defer ctx.Close()
+
+	StartTicker(ctx.Counters)
+	defer TicksDone(ctx.Counters)
+
 	for j := range ctx.Input {
 		for v := range j.Values {
 			ctx.Collector <- KeyValue{j.Key, v}
@@ -712,6 +729,9 @@ type IntegerSumReducer struct {
 
 func (s *IntegerSumReducer) Reduce(ctx ReduceContext) {
 	defer ctx.Close()
+
+	StartTicker(ctx.Counters)
+	defer TicksDone(ctx.Counters)
 
 	for j := range ctx.Input {
 		var count int64

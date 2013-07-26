@@ -10,7 +10,7 @@ func StartHttp(port int, message string) {
 
 	s := &http.Server{
 		Addr:           fmt.Sprintf(":%d", port),
-		Handler:        &handler{message},
+		Handler:        &handler{message: message, started: time.Now()},
 		ReadTimeout:    10 * time.Second,
 		WriteTimeout:   10 * time.Second,
 		MaxHeaderBytes: 1 << 20,
@@ -22,11 +22,12 @@ func StartHttp(port int, message string) {
 }
 
 type handler struct {
+	started time.Time
 	message string
 }
 
 func (f *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte(fmt.Sprintf("%s\n", f.message)))
+	w.Write([]byte(fmt.Sprintf("%s\nup %v\n", f.message, time.Now().Sub(f.started))))
 }
 
 func check(e error) {

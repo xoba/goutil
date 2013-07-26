@@ -38,18 +38,44 @@ type Interface interface {
 	Run(args []string)
 }
 
-func ConfirmYorN(msg string) bool {
-	fmt.Printf("%s [N] ", msg)
+func ConditionalRun(msg string, def bool, runTrue, runFalse func()) {
+	if r, err := ConfirmYorN(msg, def); r && err == nil {
+		runTrue()
+	} else {
+		runFalse()
+	}
+}
+
+func ConfirmYorN(msg string, def bool) (bool, error) {
+	d := func() string {
+		if def {
+			return "Y"
+		} else {
+			return "N"
+		}
+	}()
+
+	fmt.Printf("%s [%s] ", msg, d)
 	var resp string
 	_, err := fmt.Scanf("%s", &resp)
 	if err != nil {
-		return false
+		return false, err
 	}
 	if len(resp) == 0 {
-		resp = "n"
+		resp = d
 	}
 	resp = strings.ToLower(resp)
-	return !strings.Contains(resp, "n") && strings.Contains(resp, "y")
+	return !strings.Contains(resp, "n") && strings.Contains(resp, "y"), nil
+}
+
+func Query(message, def string) (string, error) {
+	fmt.Printf("%s [%s] ", message, def)
+	var resp string
+	_, err := fmt.Scanf("%s", &resp)
+	if err != nil {
+		return "", err
+	}
+	return resp, nil
 }
 
 func SummarizeFlags(fs *flag.FlagSet) {
