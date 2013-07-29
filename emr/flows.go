@@ -1,14 +1,20 @@
 package emr
 
 import (
+	"bufio"
 	"code.google.com/p/go-uuid/uuid"
+	"compress/gzip"
 	"encoding/json"
 	"encoding/xml"
 	"flag"
 	"fmt"
 	"github.com/xoba/goutil/aws"
+	"github.com/xoba/goutil/aws/s3"
 	"net/url"
 	"os/exec"
+	"runtime"
+	"strings"
+	"sync"
 )
 
 type ShowFlow struct {
@@ -114,4 +120,72 @@ func (f *FlowsResponse) GetStep(name string) *StepMember {
 		}
 	}
 	return nil
+}
+
+func LoadLines(ss3 s3.Interface, output *StepOutput, f func(string, *KeyValue)) {
+	var wg, wg2 sync.WaitGroup
+	ch2 := make(chan *FileKeyValue)
+	ch := make(chan s3.Object)
+	wg2.Add(1)
+	go func() {
+		for fkv := range ch2 {
+			f(fkv.Filename, fkv.Item)
+		}
+		wg2.Done()
+	}()
+	for i := 0; i < runtime.NumCPU(); i++ {
+		wg.Add(1)
+		go func() {
+			for o := range ch {
+				r, err := ss3.Get(s3.GetRequest{o})
+				check(err)
+				defer r.Close()
+				if strings.HasSuffix(o.Key, ".gz") {
+					r, err = gzip.NewReader(r)
+					check(err)
+				}
+
+				scanner := bufio.NewScanner(r)
+				for scanner.Scan() {
+					kv := ParseLine(scanner.Text())
+					ch2 <- &FileKeyValue{
+						Filename: o.Bucket + "/" + o.Key,
+						Item:     &kv,
+					}
+				}
+				if err := scanner.Err(); err != nil {
+					panic(err)
+				}
+			}
+			wg.Done()
+		}()
+	}
+	List(ss3, output, ch)
+	wg.Wait()
+	close(ch2)
+	wg2.Wait()
+}
+
+type FileKeyValue struct {
+	Filename string
+	Item     *KeyValue
+}
+
+func List(ss3 s3.Interface, output *StepOutput, ch chan s3.Object) {
+	var marker string
+	for {
+		r, err := ss3.List(s3.ListRequest{MaxKeys: 1000, Bucket: output.Bucket, Prefix: output.Prefix, Marker: marker})
+		if err != nil {
+			panic(err)
+		}
+		for _, v := range r.Contents {
+			ch <- s3.Object{Bucket: output.Bucket, Key: v.Key}
+		}
+		if r.IsTruncated {
+			marker = r.Contents[len(r.Contents)-1].Key
+		} else {
+			break
+		}
+	}
+	close(ch)
 }

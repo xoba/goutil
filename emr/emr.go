@@ -8,6 +8,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"github.com/xoba/goutil/aws"
 	"github.com/xoba/goutil/aws/s3"
@@ -17,6 +18,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -222,9 +225,10 @@ type Step struct {
 	Reducers           int           `json:",omitempty"`
 	Timeout            time.Duration `json:",omitempty"`
 	Mapper, Reducer    tool.Interface
-	Compress           bool `json:",omitempty"`
-	CompressMapOutput  bool `json:",omitempty"`
-	SortSecondKeyField bool `json:",omitempty"`
+	Compress           bool        `json:",omitempty"`
+	CompressMapOutput  bool        `json:",omitempty"`
+	SortSecondKeyField bool        `json:",omitempty"`
+	ToolChecker        ToolChecker `json:",omitempty"`
 	Context
 }
 
@@ -281,8 +285,8 @@ func Run(flow Flow) {
 		mapperObject := s3.Object{Bucket: flow.ScriptBucket, Key: "mapper/" + id}
 		reducerObject := s3.Object{Bucket: flow.ScriptBucket, Key: "reducer/" + id}
 
-		check(ss3.PutObject(s3.PutObjectRequest{Object: mapperObject, ContentType: "application/octet-stream", Data: []byte(createScript(step.Mapper))}))
-		check(ss3.PutObject(s3.PutObjectRequest{Object: reducerObject, ContentType: "application/octet-stream", Data: []byte(createScript(step.Reducer))}))
+		check(ss3.PutObject(s3.PutObjectRequest{Object: mapperObject, ContentType: "application/octet-stream", Data: []byte(createScript(step.Mapper, step.ToolChecker))}))
+		check(ss3.PutObject(s3.PutObjectRequest{Object: reducerObject, ContentType: "application/octet-stream", Data: []byte(createScript(step.Reducer, step.ToolChecker))}))
 
 		{
 			v.Set(fmt.Sprintf("Steps.member.%d.Name", n), step.Name)
@@ -494,8 +498,51 @@ func split(s string) string {
 	return string(buf.Bytes())
 }
 
-func createScript(t tool.Interface) string {
+// returns false if somehow tool doesn't check out
+type ToolChecker func(path string, t tool.Interface) error
+
+func (t *ToolChecker) MarshalJSON() ([]byte, error) {
+	return []byte(`"[ToolChecker]"`), nil
+}
+
+func NullChecker(path string, t tool.Interface) error {
+	return nil
+}
+
+func LapackToolChecker(path string, t tool.Interface) error {
+	var buf bytes.Buffer
+	cmd := exec.Command("ldd", path)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	go func() {
+		io.Copy(&buf, stdout)
+	}()
+	cmd.Start()
+	err = cmd.Wait()
+	if err != nil {
+		return err
+	}
+	expr := "(?i)(lapack|fortran|blas)"
+	r := regexp.MustCompile(expr)
+	if r.MatchString(string(buf.Bytes())) {
+		return errors.New(fmt.Sprintf("output of \"ldd %s\" matches %s", path, expr))
+	}
+	return nil
+}
+
+func createScript(t tool.Interface, checker ToolChecker) string {
+
 	cmd := "go/bin/" + os.Args[0]
+
+	if checker == nil {
+		// since amazon emr doesn't have these libs
+		checker = LapackToolChecker
+	}
+	if err := checker(cmd, t); err != nil {
+		panic(fmt.Sprintf("tool %s doesn't check out: %v", t.Name(), err))
+	}
 
 	buf, err := ioutil.ReadFile(cmd)
 	check(err)
