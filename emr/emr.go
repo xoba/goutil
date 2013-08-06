@@ -792,22 +792,25 @@ func (s *IntegerSumReducer) Reduce(ctx ReduceContext) {
 	}
 }
 
-func tick(ch chan<- Count, count int) {
-	ch <- Count{Group: "ticks", Counter: fmt.Sprintf("minutes-%03d", count), Amount: 1}
-}
-
 func TicksDone(ch chan<- Count) {
 	ch <- Count{Group: "ticks", Counter: "done", Amount: 1}
 }
 
 func StartTicker(ch chan<- Count) {
-	tick(ch, 0)
+	dur := 3600 * time.Second / 4
+
+	tick(0, ch)
+
 	go func() {
-		var minutes int
-		c := time.Tick(1 * time.Minute)
+		var count int
+		c := time.Tick(dur)
 		for _ = range c {
-			minutes++
-			tick(ch, minutes)
+			count++
+			tick(time.Duration(count)*dur, ch)
 		}
 	}()
+}
+
+func tick(dur time.Duration, ch chan<- Count) {
+	ch <- Count{Group: "ticks", Counter: fmt.Sprintf("%v", dur), Amount: 1}
 }
