@@ -1,5 +1,7 @@
 package aws
 
 type Auth struct {
-	AccessKey, SecretKey string
+	Email                      string
+	AccessKey, SecretKey       string
+	AccountID, CanonicalUserID string
 }
