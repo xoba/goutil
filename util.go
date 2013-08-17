@@ -115,6 +115,62 @@ func (b BufferReaderFact) CreateReader() (io.ReadCloser, error) {
 	return BufferReader{buf}, nil
 }
 
+type Authorizer func(r *http.Request) bool
+
+type HttpAuth struct {
+	authorizers []Authorizer
+	realm       string
+	expecting   map[string]string
+	handler     http.Handler
+}
+
+func NewHttpAuth(realm string, handler http.Handler, auths ...Authorizer) *HttpAuth {
+	return &HttpAuth{realm: realm, handler: handler, expecting: make(map[string]string), authorizers: auths}
+}
+
+func (a *HttpAuth) Add(user, password string) {
+	var dst bytes.Buffer
+	enc := base64.NewEncoder(base64.StdEncoding, &dst)
+	str := user + ":" + password
+	enc.Write([]byte(str))
+	enc.Close()
+	a.expecting[string(dst.Bytes())] = str
+}
+
+func (a *HttpAuth) Authorized(r *http.Request) bool {
+	auth := r.Header.Get("Authorization")
+	parts := strings.Split(auth, " ")
+	if len(parts) == 2 {
+		_, ok := a.expecting[parts[1]]
+		return ok
+	}
+	return false
+}
+
+func (s *HttpAuth) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+
+	authorized := func() bool {
+		if s.Authorized(r) {
+			return true
+		}
+		for _, x := range s.authorizers {
+			if x(r) {
+				return true
+			}
+		}
+		return false
+	}()
+
+	if authorized {
+		s.handler.ServeHTTP(w, r)
+	} else {
+		w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Basic realm="%s"`, s.realm))
+		w.Header().Set("Content-Type", `text/plain`)
+		w.WriteHeader(401)
+		fmt.Fprintf(w, "please authenticate!\n")
+	}
+}
+
 type HttpAuthMux struct {
 	realm     string
 	expecting map[string]string

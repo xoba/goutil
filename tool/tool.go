@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"sort"
@@ -125,7 +126,7 @@ func Run(b Build) {
 
 			row := make(map[string]string)
 
-			row["command"] = os.Args[0] + " " + k
+			row["command"] = filepath.Base(os.Args[0]) + " " + k
 			row["description"] = v.Description()
 
 			row["code"] = fmt.Sprintf("%v", reflect.TypeOf(v))
