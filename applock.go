@@ -1,12 +1,89 @@
 package goutil
 
 import (
+	"bufio"
+	"code.google.com/p/go-uuid/uuid"
 	"fmt"
+	"net"
 	"net/http"
+	"os"
+	"syscall"
 	"time"
 )
 
-func StartHttp(port int, message string) {
+var gcbh chan interface{} = make(chan interface{})
+
+// prevents an object from getting garbage collected
+func GCBlackHole() chan<- interface{} {
+	return gcbh
+}
+
+func init() {
+	go func() {
+		var blackHole []interface{}
+		for i := range gcbh {
+			blackHole = append(blackHole, i)
+		}
+	}()
+}
+
+// maintains a persistent uuid
+func AppIdLocker(callback func(string, *os.File)) func(*os.File) bool {
+	return func(f *os.File) bool {
+		var lines []string
+		f.Seek(0, 0)
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			lines = append(lines, scanner.Text())
+		}
+		var id string
+		if scanner.Err() != nil || len(lines) == 0 {
+			f.Seek(0, 0)
+			id = uuid.New()
+			_, err := fmt.Fprintf(f, "%s\n", id)
+			if err != nil {
+				return false
+			}
+			err = f.Sync()
+			if err != nil {
+				return false
+			}
+		} else if len(lines) > 0 {
+			id = lines[0]
+		}
+		callback(id, f)
+		return true
+	}
+}
+
+// grab exclusive r/w lock within deadline, callback on successfully locked file
+// note that if the file gets garbage collected, lock is released!
+func ExclusiveLock(path string, deadline time.Duration, callback func(*os.File) bool) bool {
+
+	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0666)
+	if err != nil {
+		return false
+	}
+
+	ch := make(chan error)
+
+	go func() {
+		ch <- syscall.Flock(int(file.Fd()), syscall.LOCK_EX)
+	}()
+
+	select {
+	case <-ch:
+		if err != nil {
+			return false
+		}
+	case <-time.After(deadline):
+		return false
+	}
+
+	return callback(file)
+}
+
+func StartHttp(port int, message string) error {
 
 	s := &http.Server{
 		Addr:           fmt.Sprintf(":%d", port),
@@ -16,9 +93,16 @@ func StartHttp(port int, message string) {
 		MaxHeaderBytes: 1 << 20,
 	}
 
+	l, e := net.Listen("tcp", s.Addr)
+	if e != nil {
+		return e
+	}
+
 	go func() {
-		check(s.ListenAndServe())
+		check(s.Serve(l))
 	}()
+
+	return nil
 }
 
 type handler struct {

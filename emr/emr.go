@@ -516,10 +516,15 @@ func LapackToolChecker(path string, t tool.Interface) error {
 	if err != nil {
 		return err
 	}
-	go func() {
-		io.Copy(&buf, stdout)
-	}()
 	cmd.Start()
+	done := make(chan error)
+	go func() {
+		_, err := io.Copy(&buf, stdout)
+		done <- err
+	}()
+	if err := <-done; err != nil {
+		return err
+	}
 	err = cmd.Wait()
 	if err != nil {
 		return err

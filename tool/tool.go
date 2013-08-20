@@ -18,9 +18,10 @@ import (
 type Build struct {
 	Version string
 	Commit  string // the commit id
-	Url     string // identifies the commit (like a github url)
+	Url     string
 	BuildId string
 	Status  string
+	Clean   bool // whether or not we're completely sync'd with version control
 	Built   time.Time
 }
 
