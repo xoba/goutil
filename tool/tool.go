@@ -161,11 +161,11 @@ func Run(b Build) {
 			row := make(map[string]string)
 
 			row["command"] = filepath.Base(os.Args[0]) + " " + k
-			row["description"] = v.Description()
+			row["description"] = Description(v)
 
 			row["code"] = fmt.Sprintf("%v", reflect.TypeOf(v))
 
-			tags := v.Tags()
+			tags := Tags(v)
 			if len(tags) > 0 {
 				sort.Strings(tags)
 				row["tags"] = strings.Join(tags, ", ")
