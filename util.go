@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"runtime"
 	"strings"
-	"syscall"
 	"time"
 )
 

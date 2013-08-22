@@ -35,9 +35,42 @@ func (b Build) FormatBuilt() string {
 
 type Interface interface {
 	Name() string
+	Run(args []string)
+}
+
+type ExtendedInterface interface {
 	Description() string
 	Tags() []string
-	Run(args []string)
+}
+
+func Tags(i Interface) (out []string) {
+	e, ok := i.(ExtendedInterface)
+	if ok {
+		out = append(out, e.Tags()...)
+	}
+	return
+}
+
+func Name(i Interface) string {
+	parts := strings.Split(i.Name(), ",")
+	if len(parts) > 1 {
+		return parts[0]
+	} else {
+		return i.Name()
+	}
+}
+
+func Description(i Interface) string {
+	parts := strings.Split(i.Name(), ",")
+	if len(parts) > 1 {
+		return parts[1]
+	}
+	e, ok := i.(ExtendedInterface)
+	if ok {
+		return e.Description()
+	} else {
+		return ""
+	}
 }
 
 func ConditionalRun(msg string, def bool, runTrue, runFalse func()) {
@@ -219,7 +252,7 @@ func (p *KeyValuePrinter) Print() {
 var tools map[string]Interface = make(map[string]Interface)
 
 func Register(r Interface) {
-	name := r.Name()
+	name := Name(r)
 	_, ok := tools[name]
 	if ok {
 		panic("tools with duplicate names: " + name)
@@ -239,7 +272,7 @@ type Sequence struct {
 func (st *Sequence) Tags() (out []string) {
 	m := make(map[string]bool)
 	for _, x := range st.tools {
-		for _, y := range x.Tags() {
+		for _, y := range Tags(x) {
 			m[y] = true
 		}
 	}
@@ -260,7 +293,7 @@ func (st *Sequence) Description() string {
 	b.WriteString(" (seq: ")
 	var out []string
 	for _, x := range st.tools {
-		out = append(out, x.Name())
+		out = append(out, Name(x))
 	}
 	b.WriteString(strings.Join(out, ", "))
 	b.WriteString(")")
@@ -270,7 +303,7 @@ func (st *Sequence) Description() string {
 }
 func (st *Sequence) Run(args []string) {
 	for _, x := range st.tools {
-		fmt.Printf("running %s...\n", x.Name())
+		fmt.Printf("running %s...\n", Name(x))
 		x.Run(args)
 	}
 }
