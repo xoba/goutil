@@ -3,6 +3,7 @@ package tool
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -39,12 +40,20 @@ type Interface interface {
 }
 
 type ExtendedInterface interface {
+	Interface
+	HasDescription
+	HasTags
+}
+
+type HasDescription interface {
 	Description() string
+}
+type HasTags interface {
 	Tags() []string
 }
 
 func Tags(i Interface) (out []string) {
-	e, ok := i.(ExtendedInterface)
+	e, ok := i.(HasTags)
 	if ok {
 		out = append(out, e.Tags()...)
 	}
@@ -65,7 +74,7 @@ func Description(i Interface) string {
 	if len(parts) > 1 {
 		return parts[1]
 	}
-	e, ok := i.(ExtendedInterface)
+	e, ok := i.(HasDescription)
 	if ok {
 		return e.Description()
 	} else {
@@ -126,11 +135,12 @@ func SummarizeFlags(fs *flag.FlagSet) {
 
 func Run(b Build) {
 
-	var hidden, version bool
+	var hidden, version, djson bool
 	var pathUrl string
 
 	flag.BoolVar(&version, "version", false, "detailed version information")
 	flag.BoolVar(&hidden, "hidden", false, "show hidden tools")
+	flag.BoolVar(&djson, "json", false, "show tools in json")
 	flag.StringVar(&pathUrl, "pathurl", "", "adds path onto build url")
 	flag.Parse()
 
@@ -140,9 +150,7 @@ func Run(b Build) {
 		p := path.Clean("/" + pathUrl)
 		fmt.Printf("%s%s\n", b.Url, p)
 
-	case len(os.Args) < 2 || hidden:
-
-		fmt.Printf("v.%s: nothing to run, see options; -help shows more:\n\n", b.Version)
+	case len(os.Args) < 2 || hidden || djson:
 
 		var names []string
 		for k := range tools {
@@ -185,7 +193,18 @@ func Run(b Build) {
 			cols = append(cols, "tags")
 		}
 
-		fmt.Println(FormatTextTable(false, " ", cols, rows))
+		if djson {
+			m := []interface{}{
+				b,
+				rows,
+			}
+			if buf, err := json.MarshalIndent(m, "", "  "); err == nil {
+				fmt.Println(string(buf))
+			}
+		} else {
+			fmt.Printf("v.%s: nothing to run, see options; -help shows more:\n\n", b.Version)
+			fmt.Println(FormatTextTable(false, " ", cols, rows))
+		}
 
 	default:
 
