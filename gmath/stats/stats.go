@@ -6,37 +6,33 @@ import (
 	"sort"
 )
 
+// two-pass algorithm
 func MeanVariance(list []float64) (mean float64, variance float64) {
+
 	n := float64(len(list))
-	switch n {
-	case 0:
-		return math.NaN(), math.NaN()
-	case 1:
-		return list[0], math.NaN()
+	mean = Mean(list)
+
+	if n < 2 {
+		return mean, math.NaN()
 	}
-	var sum1, sum2 float64
+
+	var sum float64
 	for _, x := range list {
-		sum1 += x
-		sum2 += x * x
+		sum += math.Pow(x-mean, 2)
 	}
-	mean = sum1 / n
-	variance = n / (n - 1) * (sum2/n - mean*mean)
-	return
+	return mean, sum / (n - 1)
 }
 
 func Mean(list []float64) float64 {
 	n := float64(len(list))
-	switch n {
-	case 0:
+	if n == 0 {
 		return math.NaN()
-	case 1:
-		return list[0]
 	}
-	var sum1 float64
+	var sum float64
 	for _, x := range list {
-		sum1 += x
+		sum += x
 	}
-	return sum1 / n
+	return sum / n
 }
 
 func Variance(list []float64) float64 {
