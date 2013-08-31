@@ -1,3 +1,4 @@
+// code for elastic mapreduce (streaming)
 package emr
 
 import (

@@ -1,3 +1,4 @@
+// reader factory
 package rf
 
 import (

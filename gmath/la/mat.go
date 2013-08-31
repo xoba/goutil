@@ -1,3 +1,4 @@
+// linear algebra routines
 package la
 
 import (

@@ -1,3 +1,4 @@
+// code for accessing dynamo db
 package ddb
 
 import (

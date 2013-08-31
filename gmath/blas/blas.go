@@ -1,5 +1,6 @@
 // +build !omitblas
 
+// interface to Basic Linear Algebra Subprograms; see http://www.netlib.org/blas/
 package blas
 
 // #cgo LDFLAGS: -L/usr/lib/libblas -lblas

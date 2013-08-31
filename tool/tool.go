@@ -1,3 +1,4 @@
+// manages main executable as agglomeration of tools
 package tool
 
 import (

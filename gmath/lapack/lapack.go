@@ -1,5 +1,6 @@
 // +build !omitblas
 
+// interface to Linear Algebra PACKage; see http://www.netlib.org/lapack/
 package lapack
 
 // #cgo LDFLAGS: -L/usr/lib/libblas -L/usr/lib/lapack -llapack -lblas

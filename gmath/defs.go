@@ -1,3 +1,4 @@
+// math code
 package gmath
 
 import (

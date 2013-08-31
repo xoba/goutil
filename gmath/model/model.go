@@ -1,3 +1,4 @@
+// modelling, specifically gps, routines
 package model
 
 import (
