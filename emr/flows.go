@@ -21,9 +21,6 @@ type ShowFlow struct {
 	Auth aws.Auth
 }
 
-func (t *ShowFlow) Tags() []string {
-	return []string{}
-}
 func (m *ShowFlow) Name() string {
 	return "flow"
 }

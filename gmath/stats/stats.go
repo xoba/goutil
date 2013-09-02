@@ -120,15 +120,12 @@ func EffectiveNumber(weights []float64) float64 {
 
 // median by sort, boolean controls whether sort is done in place or on a copy
 func Median(inPlace bool, list []float64) float64 {
-	return Percentile(inPlace, list, 50)
+	return Percentile(inPlace, list, 0.5)
 }
 
 type Tool struct {
 }
 
-func (t *Tool) Tags() []string {
-	return []string{}
-}
 func (m *Tool) Name() string {
 	return "stats"
 }

@@ -28,6 +28,11 @@ type RetryStrategy interface {
 	NewInstance() RetryStrategyInstance
 }
 
+func DataUrl(b []byte, mimeType string) string {
+	b64 := base64.StdEncoding.EncodeToString(b)
+	return fmt.Sprintf("data:%s;base64,%s", mimeType, b64)
+}
+
 type RetryStrategyInstance interface {
 	// returns whether or not to retry, backing off in time if it likes
 	Retry() bool

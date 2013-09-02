@@ -40,15 +40,10 @@ type Interface interface {
 	Run(args []string)
 }
 
-type ExtendedInterface interface {
-	Interface
-	HasDescription
-	HasTags
-}
-
 type HasDescription interface {
 	Description() string
 }
+
 type HasTags interface {
 	Tags() []string
 }
@@ -74,7 +69,12 @@ func Description(i Interface) string {
 	parts := strings.Split(i.Name(), ",")
 	if len(parts) > 1 {
 		return parts[1]
+	} else {
+		return rawDesc(i)
 	}
+}
+
+func rawDesc(i Interface) string {
 	e, ok := i.(HasDescription)
 	if ok {
 		return e.Description()

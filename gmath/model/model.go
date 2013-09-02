@@ -1,28 +1,21 @@
-// modelling, specifically gps, routines
+/*
+
+modelling routines, focused on gps algorithm from http://www-stat.stanford.edu/~jhf/ftp/GPSpub.pdf‎
+
+*/
 package model
 
 import (
 	"bytes"
 	"encoding/gob"
-	"github.com/xoba/goutil/gmath/blas"
+	"encoding/json"
+	"fmt"
+	"github.com/xoba/goutil/gmath"
 	"github.com/xoba/goutil/gmath/la"
 	"github.com/xoba/goutil/gmath/stats"
 	"math"
 	"math/rand"
 )
-
-type RegressionProblem struct {
-	Data         *la.Matrix
-	RowNames     []string
-	ColumnNames  []string
-	Response     *la.Vector
-	ResponseName string
-}
-
-type ObservationAssignments struct {
-	TrainingIndicies []int
-	TestingIndicies  []int
-}
 
 func (f *ObservationAssignments) isRowTraining(i int) int {
 	for _, x := range f.TrainingIndicies {
@@ -33,33 +26,15 @@ func (f *ObservationAssignments) isRowTraining(i int) int {
 	return 0
 }
 
-type ObservationAssigner interface {
-	Assign() *ObservationAssignments
-}
-
-type TrainingOnlyAssigner struct {
-	n int
-}
-
-func (x *TrainingOnlyAssigner) Assign() *ObservationAssignments {
-	var train []int
-	for i := 0; i < x.n; i++ {
-		train = append(train, i)
-	}
-	return &ObservationAssignments{
-		TrainingIndicies: train,
-	}
-}
-
 type RandomAssigner struct {
-	n int
-	f float64
+	N int     // total number of observations
+	P float64 // probability that observation is a training example
 }
 
 func (x *RandomAssigner) Assign() *ObservationAssignments {
 	var test, train []int
-	for i := 0; i < x.n; i++ {
-		if rand.Float64() <= x.f {
+	for i := 0; i < x.N; i++ {
+		if rand.Float64() <= x.P {
 			train = append(train, i)
 		} else {
 			test = append(test, i)
@@ -71,33 +46,21 @@ func (x *RandomAssigner) Assign() *ObservationAssignments {
 	}
 }
 
-// monitors gps iterations
-type Monitor interface {
-	// whether or not to continue gps iterations
-	Continue(v float64, jstar int, m []float64, trainingRisk, testRisk float64) bool
+type TrainingOnlyAssigner struct {
+	N int
+}
+
+func (x *TrainingOnlyAssigner) Assign() *ObservationAssignments {
+	var train []int
+	for i := 0; i < x.N; i++ {
+		train = append(train, i)
+	}
+	return &ObservationAssignments{
+		TrainingIndicies: train,
+	}
 }
 
 type PassiveMonitor func(v float64, jstar int, m []float64, trainingRisk, testRisk float64)
-
-type DownRoundsMonitor struct {
-	min       float64
-	downCount int
-	target    int
-}
-
-func NewDownRounds(target int) *DownRoundsMonitor {
-	return &DownRoundsMonitor{target: target, min: math.MaxFloat64}
-}
-
-func (m *DownRoundsMonitor) Continue(v float64, jstar int, a []float64, i, o float64) bool {
-	if o < m.min {
-		m.downCount = 0
-		m.min = o
-	} else {
-		m.downCount++
-	}
-	return m.downCount < m.target
-}
 
 type FixedRoundsMonitor struct {
 	Vmax  float64
@@ -121,15 +84,6 @@ func (m *IntersectionMonitor) Continue(v float64, jstar int, a []float64, i, o f
 	return m.A.Continue(v, jstar, a, i, o)
 }
 
-type RiskCalculator interface {
-	// rowMask is comprised of 1.0 and 0.0 elements, to respectively mask in or out various rows
-	CalcRisk(model []float64, rowMask []float64, rp *RegressionProblem, calcValue, calcDerivative bool) ValueAndDerivative
-}
-
-type PenaltyCalculator interface {
-	CalcPenalty(model []float64, calcValue, calcDerivative bool) ValueAndDerivative
-}
-
 func RunGps(rp *RegressionProblem, testSet *ObservationAssignments, dv float64, mon Monitor) *GpsResults {
 	rc := &LinearRegressionRisk{}
 	pc := NewLassoPenalty(len(rp.ColumnNames))
@@ -137,6 +91,8 @@ func RunGps(rp *RegressionProblem, testSet *ObservationAssignments, dv float64, 
 }
 
 func RunGpsFull(rp *RegressionProblem, tt *ObservationAssignments, dv float64, rc RiskCalculator, pc PenaltyCalculator, mon Monitor) *GpsResults {
+
+	check(ValidateRegressionProblem(rp))
 
 	rowMask := func(indicies []int) []float64 {
 		out := make([]float64, rp.Data.Rows)
@@ -149,19 +105,28 @@ func RunGpsFull(rp *RegressionProblem, tt *ObservationAssignments, dv float64, r
 	trainMask := rowMask(tt.TrainingIndicies)
 	testMask := rowMask(tt.TestingIndicies)
 
-	cn := NormalizeColumns(rp.Data, trainMask)
-	rn := NormalizeColumns(rp.Response.AsColumnVector(), trainMask)
+	cn := NormalizeColumnsInPlace(rp.Data, trainMask)
+	rn := func() Normalization {
+		switch rc.Norm() {
+		case X_AND_Y:
+			return NormalizeColumnsInPlace(rp.Response.AsColumnVector(), trainMask)[0]
+		case X_ONLY:
+			return Normalization{IsNone: true}
+		default:
+			panic("illegal norm type")
+		}
+	}()
 
-	p := rp.NumPredictors()
+	p := rp.P
 
 	var v float64
 	a := make([]float64, p)
 
 	for {
-		risk := rc.CalcRisk(a, trainMask, rp, true, true)
+		risk := rc.CalcRisk(a, trainMask, rp, CalcAll)
 		dr := risk.Derivative
 
-		penalty := pc.CalcPenalty(a, true, true)
+		penalty := pc.CalcPenalty(a, CalcAll)
 		dp := penalty.Derivative
 
 		lambda := NewKVList()
@@ -187,7 +152,7 @@ func RunGpsFull(rp *RegressionProblem, tt *ObservationAssignments, dv float64, r
 		a[jstar] += dv * Sgn(-dr[jstar])
 		v += dv
 
-		testRisk := rc.CalcRisk(a, testMask, rp, true, false).Value
+		testRisk := rc.CalcRisk(a, testMask, rp, ValueOnly).Value
 
 		if !mon.Continue(v, jstar, a, risk.Value, testRisk) {
 			break
@@ -198,7 +163,7 @@ func RunGpsFull(rp *RegressionProblem, tt *ObservationAssignments, dv float64, r
 
 	results.Response = SignalDimInfo{
 		Name: rp.ResponseName,
-		Norm: rn[0],
+		Norm: rn,
 	}
 
 	for i := 0; i < p; i++ {
@@ -218,6 +183,19 @@ type GpsResults struct {
 	Predictors []SignalDimInfo
 	Response   SignalDimInfo
 }
+
+func (i *GpsResults) String() string {
+	return marshal(i)
+}
+
+func marshal(i interface{}) string {
+	if buf, err := json.Marshal(i); err == nil {
+		return string(buf)
+	} else {
+		return fmt.Sprintf("%v", i)
+	}
+}
+
 type SignalDimInfo struct {
 	Name  string
 	Norm  Normalization
@@ -225,14 +203,9 @@ type SignalDimInfo struct {
 }
 type Normalization struct {
 	Mean, Sd float64
+	IsNone   bool
 }
 
-func (r *RegressionProblem) NumObs() int {
-	return r.Data.Rows
-}
-func (r *RegressionProblem) NumPredictors() int {
-	return r.Data.Cols
-}
 func (r *RegressionProblem) Copy() *RegressionProblem {
 	var buf bytes.Buffer
 	e := gob.NewEncoder(&buf)
@@ -243,141 +216,12 @@ func (r *RegressionProblem) Copy() *RegressionProblem {
 	return &out
 }
 
-type ElasticNet1 struct {
-	Beta float64
-}
-type ElasticNet2 struct {
-	Beta float64
-}
-
-func NewElasticNetFamily(beta float64, n int) PenaltyCalculator {
-	if beta <= 0 || beta > 2 {
-		panic("bad beta")
-	}
-	switch {
-	case beta < 0 || beta > 2:
-		panic("bad beta")
-	case beta > 1:
-		return &ElasticNet1{beta}
-	case beta == 1:
-		return NewLassoPenalty(n)
-	case beta < 1:
-		return &ElasticNet2{beta}
-	default:
-		panic("illegal state")
-	}
-}
-func (en *ElasticNet2) CalcPenalty(a []float64, v, d bool) ValueAndDerivative {
-	n := len(a)
-	x := make([]float64, n)
-	var p float64
-	for i := 0; i < n; i++ {
-		arg := (1-en.Beta)*math.Abs(a[i]) + en.Beta
-		p += math.Log(arg)
-		x[i] = (1 - en.Beta) / arg
-	}
-	return ValueAndDerivative{
-		Value:      p,
-		Derivative: x,
-	}
-}
-
-func (en *ElasticNet1) CalcPenalty(a []float64, v, d bool) ValueAndDerivative {
-	n := len(a)
-	x := make([]float64, n)
-	var p float64
-	for i := 0; i < n; i++ {
-		p += (en.Beta-1)*math.Pow(a[i], 2)/2 + (2-en.Beta)*math.Abs(a[i])
-		x[i] = 2*(en.Beta-1)*math.Abs(a[i]) + 2 - en.Beta
-	}
-	return ValueAndDerivative{
-		Value:      p,
-		Derivative: x,
-	}
-}
-
-type LassoPenalty struct {
-	deriv []float64
-}
-
-func NewLassoPenalty(n int) *LassoPenalty {
-	a := make([]float64, n)
-	for i := 0; i < n; i++ {
-		a[i] = 1
-	}
-	return &LassoPenalty{a}
-}
-
-func (lp *LassoPenalty) CalcPenalty(model []float64, v, d bool) ValueAndDerivative {
-	var out ValueAndDerivative
-	if v {
-		out.Value = blas.Dasum(len(model), model, 1)
-	}
-	if d {
-		out.Derivative = lp.deriv
-	}
-	return out
-}
-
-type LinearRegressionRisk struct {
-}
-
-func (lr LinearRegressionRisk) CalcRisk(model []float64, rowMask []float64, rp *RegressionProblem, calcValue, calcDerivative bool) ValueAndDerivative {
-
-	n := rp.Data.Rows
-	p := rp.NumPredictors()
-
-	ea := make([]float64, n)
-	blas.Dcopy(n, rp.Response.Elements, 1, ea, 1)
-
-	{
-		alpha := 1.0
-		a := rp.Data
-		x := model
-
-		beta := -1.0
-		y := ea
-
-		blas.Dgemv("N", a.Rows, a.Cols, alpha, a.Elements, a.ColumnStride, x, 1, beta, y, 1)
-	}
-
-	tmp := make([]float64, n)
-	blas.Dsbmv("L", n, 0, 1.0, rowMask, 1, ea, 1, 0, tmp, 1)
-	ea = tmp
-
-	var risk float64
-	if calcValue {
-		risk = math.Pow(blas.Dnrm2(len(ea), ea, 1), 2)
-	}
-
-	var g []float64
-	if calcDerivative {
-		g = make([]float64, p)
-
-		alpha := 1.0
-		a := rp.Data
-		x := ea
-
-		beta := 0.0
-		y := g
-
-		blas.Dgemv("T", a.Rows, a.Cols, alpha, a.Elements, a.ColumnStride, x, 1, beta, y, 1)
-	}
-
-	count := math.Pow(blas.Dnrm2(len(rowMask), rowMask, 1), 2)
-
-	return ValueAndDerivative{
-		Value:      risk / count,
-		Derivative: g,
-	}
-}
-
 type ValueAndDerivative struct {
 	Value      float64
 	Derivative []float64
 }
 
-func NormalizeColumns(m *la.Matrix, rowMask []float64) (out []Normalization) {
+func NormalizeColumnsInPlace(m *la.Matrix, rowMask []float64) (out []Normalization) {
 	for i := 0; i < m.Cols; i++ {
 		var list []float64
 		for j := 0; j < m.Rows; j++ {
@@ -435,4 +279,76 @@ func Sgn(a float64) float64 {
 		return +1
 	}
 	return 0
+}
+
+type MonitorFactory func() Monitor
+
+type CrossValResults struct {
+	TestRisk   gmath.Function
+	GpsResults *GpsResults
+}
+
+// return monitor for final gps run after cross-val
+type FoldDecider func(oos gmath.Function) Monitor
+
+/*
+
+runs a cross-validation
+
+ folds: number of folds in the cross-validation
+ rp:    the regression problem per se
+ rc:    the risk measure
+ pc:    penalty term
+ mf:
+ oa:    called each time to assign observations to folds
+ fd:    decides how to regulate the final model run after cross-val
+*/
+func RunCrossVal(folds int, dv float64, rp *RegressionProblem, rc RiskCalculator, pc PenaltyCalculator, mf MonitorFactory, oa ObservationAssigner, fd FoldDecider) *CrossValResults {
+
+	var oos gmath.Function
+
+	for i := 0; i < folds; i++ {
+		builder := gmath.NewInterpolationBuilder()
+		tt := oa.Assign()
+		mon := &IntersectionMonitor{
+			A: mf(),
+			B: func(v float64, jstar int, m []float64, trainingRisk, testRisk float64) {
+				builder.Set(v, testRisk)
+			},
+		}
+		RunGpsFull(rp, tt, dv, rc, pc, mon)
+
+		f := builder.Init()
+
+		if oos == nil {
+			oos = f
+		} else {
+			oos = gmath.Add(oos, f, 100)
+		}
+	}
+
+	oos = gmath.NewScaledFunction(1.0/float64(folds), oos)
+
+	tt := &TrainingOnlyAssigner{rp.N}
+
+	results := RunGpsFull(rp, tt.Assign(), dv, rc, pc, fd(oos))
+
+	return &CrossValResults{
+		TestRisk:   oos,
+		GpsResults: results,
+	}
+}
+
+type FixedVMonitor struct {
+	Max float64
+}
+
+func (x *FixedVMonitor) Continue(v float64, jstar int, m []float64, i, o float64) bool {
+	return v < x.Max
+}
+
+func check(e interface{}) {
+	if e != nil {
+		panic(e)
+	}
 }

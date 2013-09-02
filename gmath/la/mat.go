@@ -35,14 +35,14 @@ func (m *Vector) AsColumnVector() *Matrix {
 
 }
 
-// column-major matrix
+// a column-major matrix
 type Matrix struct {
 	Rows, Cols   int
 	ColumnStride int // increment index by this, to move to next column in same row
 	Elements     []float64
 }
 
-func New(m, n int) *Matrix {
+func NewMatrix(m, n int) *Matrix {
 	return &Matrix{Rows: m, Cols: n, ColumnStride: m, Elements: make([]float64, m*n)}
 }
 
@@ -101,7 +101,7 @@ func Multiply(m ...*Matrix) *Matrix {
 }
 
 func MultiplyPair(a, b *Matrix) *Matrix {
-	c := New(a.Rows, b.Cols)
+	c := NewMatrix(a.Rows, b.Cols)
 	blas.Dgemm("N", "N", a.Rows, b.Cols, a.Cols, 1.0, a.Elements, a.ColumnStride, b.Elements, b.ColumnStride, 0.0, c.Elements, c.ColumnStride)
 	return c
 }

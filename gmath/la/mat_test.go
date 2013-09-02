@@ -9,7 +9,7 @@ import (
 
 func TestDGemv1(t *testing.T) {
 
-	a := New(2, 2)
+	a := NewMatrix(2, 2)
 	a.Elements = []float64{1, 3, 2, 4}
 
 	x := []float64{4, 5}
@@ -45,10 +45,10 @@ func TestDGemv2(t *testing.T) {
 		r := func() float64 {
 			return rand.NormFloat64()
 		}
-		a := New(m, n)
-		x := New(1, n)
-		y := New(1, m)
-		z := New(1, m)
+		a := NewMatrix(m, n)
+		x := NewMatrix(1, n)
+		y := NewMatrix(1, m)
+		z := NewMatrix(1, m)
 		for i := 0; i < m; i++ {
 			y.Set(0, i, r())
 		}

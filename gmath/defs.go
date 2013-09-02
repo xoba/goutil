@@ -10,15 +10,14 @@ import (
 type Tool struct {
 }
 
-func (t *Tool) Tags() []string {
-	return []string{}
-}
-func (m *Tool) Name() string {
+func (*Tool) Name() string {
 	return "math"
 }
-func (m *Tool) Description() string {
+func (*Tool) Description() string {
 	return "play with math stuff"
 }
+
+// play with math stuff
 func (*Tool) Run(args []string) {
 	fb := NewInterpolationBuilder()
 	for i := 0; i < 10; i++ {

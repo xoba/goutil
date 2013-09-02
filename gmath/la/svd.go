@@ -21,9 +21,9 @@ func ComputeSvd(a *Matrix) *Svd {
 
 	rank := min(a.Rows, a.Cols)
 
-	u := New(a.Rows, rank)
-	s := New(rank, 1)
-	vt := New(rank, a.Cols)
+	u := NewMatrix(a.Rows, rank)
+	s := NewMatrix(rank, 1)
+	vt := NewMatrix(rank, a.Cols)
 
 	info := lapack.Dgesdd("S", a.Rows, a.Cols, a.Elements, a.ColumnStride,
 		s.Elements,
@@ -47,7 +47,7 @@ func min(i, j int) int {
 
 func NewDiagonalMatrixWithElements(e []float64) *Matrix {
 	m := len(e)
-	out := New(m, m)
+	out := NewMatrix(m, m)
 	for i := 0; i < m; i++ {
 		out.Set(i, i, e[i])
 	}
