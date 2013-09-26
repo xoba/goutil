@@ -68,7 +68,7 @@ func Name(i Interface) string {
 func Description(i Interface) string {
 	parts := strings.Split(i.Name(), ",")
 	if len(parts) > 1 {
-		return parts[1]
+		return strings.TrimSpace(parts[1])
 	} else {
 		return rawDesc(i)
 	}

@@ -150,6 +150,7 @@ func LoadLines(ss3 s3.Interface, output *StepOutput, f func(string, *KeyValue)) 
 						Item:     &kv,
 					}
 				}
+
 				if err := scanner.Err(); err != nil {
 					panic(err)
 				}

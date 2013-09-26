@@ -10,8 +10,10 @@ import (
 )
 
 type Interface interface {
+	Copy(req CopyRequest) error
 	Put(req PutRequest) error
 	PutObject(req PutObjectRequest) error
+	Head(req Object) (*HeadResponse, error)
 	Get(req GetRequest) (io.ReadCloser, error)
 	GetObject(req GetRequest) ([]byte, error)
 	List(req ListRequest) (ListBucketResult, error)
@@ -22,8 +24,19 @@ func GetDefault(a aws.Auth) Interface {
 	return SmartS3{Auth: a, Strat: &goutil.RetryBackoffStrat{BackoffFactor: 1.5, Delay: time.Second, Retries: 5}}
 }
 
+type HeadResponse struct {
+	Etag          string
+	ContentType   string
+	ContentLength int
+	LastModified  time.Time
+}
+
 type GetRequest struct {
 	Object Object
+}
+
+type CopyRequest struct {
+	From, To Object
 }
 
 type PutRequest struct {
@@ -108,6 +121,23 @@ func (s SmartS3) Get(req GetRequest) (io.ReadCloser, error) {
 		return v.(io.ReadCloser), err
 	}
 }
+
+func (s SmartS3) Head(req Object) (*HeadResponse, error) {
+	err := checkObject(req)
+	if err != nil {
+		return nil, err
+	}
+	f := func() (interface{}, error) {
+		return head(s.Auth, req)
+	}
+	v, err := s.retry(print(req), f)
+	if err != nil {
+		return nil, err
+	} else {
+		return v.(*HeadResponse), err
+	}
+}
+
 func (s SmartS3) GetObject(req GetRequest) ([]byte, error) {
 	err := checkObject(req.Object)
 	if err != nil {
@@ -122,6 +152,22 @@ func (s SmartS3) GetObject(req GetRequest) ([]byte, error) {
 	} else {
 		return v.([]byte), err
 	}
+}
+
+func (s SmartS3) Copy(req CopyRequest) error {
+	err := checkObject(req.From)
+	if err != nil {
+		return err
+	}
+	err = checkObject(req.To)
+	if err != nil {
+		return err
+	}
+	f := func() (interface{}, error) {
+		return nil, cp(s.Auth, req)
+	}
+	_, err = s.retry(print(req), f)
+	return err
 }
 
 func (s SmartS3) Put(req PutRequest) error {

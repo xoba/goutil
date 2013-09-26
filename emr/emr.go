@@ -87,10 +87,10 @@ func RunStreamingMapper(m Mapper) {
 	collector := make(chan KeyValue)
 
 	items := make(chan KeyValue)
-	defer close(items)
 
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		m.Map(MapContext{
 			Input: items,
 			Output: Output{
@@ -98,7 +98,6 @@ func RunStreamingMapper(m Mapper) {
 				Collector: collector,
 			},
 		})
-		wg.Done()
 	}()
 
 	wg.Add(1)
@@ -107,31 +106,13 @@ func RunStreamingMapper(m Mapper) {
 	wg.Add(1)
 	go runCounters(&wg, counters)
 
-	scanner := bufio.NewScanner(os.Stdin)
-	for scanner.Scan() {
-		items <- ParseLine(scanner.Text())
-	}
-	if err := scanner.Err(); err != nil {
+	err := SlurpLines(os.Stdin, func(line string) {
+		items <- ParseLine(line)
+	})
+	close(items)
+
+	if err != nil {
 		os.Exit(1)
-	}
-}
-
-func ReassembleLine(kv KeyValue) string {
-	if len(kv.Value) == 0 {
-		return fmt.Sprintf("%s", kv.Key)
-	} else {
-		return fmt.Sprintf("%s\t%s", kv.Key, kv.Value)
-	}
-}
-
-func ParseLine(line string) KeyValue {
-	i := strings.Index(line, "\t")
-	if i >= 0 {
-		key := line[:i]
-		value := line[i+1:]
-		return KeyValue{Key: key, Value: value}
-	} else {
-		return KeyValue{Key: line}
 	}
 }
 
@@ -165,9 +146,7 @@ func RunStreamingReducer(r Reducer) {
 	var lastKey *string
 	var values chan string
 
-	scanner := bufio.NewScanner(os.Stdin)
-	for scanner.Scan() {
-		line := scanner.Text()
+	procLine := func(line string) {
 		i := strings.Index(line, "\t")
 
 		if i >= 0 {
@@ -189,9 +168,10 @@ func RunStreamingReducer(r Reducer) {
 
 			values <- value
 		}
-
 	}
-	if err := scanner.Err(); err != nil {
+
+	err := SlurpLines(os.Stdin, procLine)
+	if err != nil {
 		os.Exit(1)
 	}
 
@@ -216,7 +196,9 @@ type Flow struct {
 	SlaveSpotPrice     float64
 	ScriptBucket       string
 	LogBucket          string
+	KeepAlive          bool
 	KeyName            string
+	AvailabilityZone   string
 }
 
 type Step struct {
@@ -250,8 +232,13 @@ func Run(flow Flow) {
 	v.Set("LogUri", fmt.Sprintf("s3n://%s/%s", flow.LogBucket, id))
 
 	v.Set("Instances.Ec2KeyName", flow.KeyName)
-	v.Set("Instances.Placement.AvailabilityZone", "us-east-1d")
-	v.Set("Instances.KeepJobFlowAliveWhenNoSteps", "false")
+
+	if len(flow.AvailabilityZone) == 0 {
+		flow.AvailabilityZone = "us-east-1d"
+	}
+
+	v.Set("Instances.Placement.AvailabilityZone", flow.AvailabilityZone)
+	v.Set("Instances.KeepJobFlowAliveWhenNoSteps", fmt.Sprintf("%v", flow.KeepAlive))
 	v.Set("Instances.TerminationProtected", "false")
 
 	if flow.IsSpot {
@@ -272,8 +259,16 @@ func Run(flow Flow) {
 		v.Set("Instances.InstanceCount", fmt.Sprintf("%d", flow.Instances))
 	}
 
+	failureAction := func() string {
+		if flow.KeepAlive {
+			return "CANCEL_AND_WAIT"
+		} else {
+			return "TERMINATE_JOB_FLOW"
+		}
+	}()
+
 	v.Set("Steps.member.1.Name", "debugging")
-	v.Set("Steps.member.1.ActionOnFailure", "TERMINATE_JOB_FLOW")
+	v.Set("Steps.member.1.ActionOnFailure", failureAction)
 	v.Set("Steps.member.1.HadoopJarStep.Jar", "s3://elasticmapreduce/libs/script-runner/script-runner.jar")
 	v.Set("Steps.member.1.HadoopJarStep.Args.member.1", "s3://elasticmapreduce/libs/state-pusher/0.1/fetch")
 
@@ -291,7 +286,7 @@ func Run(flow Flow) {
 
 		{
 			v.Set(fmt.Sprintf("Steps.member.%d.Name", n), step.Name)
-			v.Set(fmt.Sprintf("Steps.member.%d.ActionOnFailure", n), "TERMINATE_JOB_FLOW")
+			v.Set(fmt.Sprintf("Steps.member.%d.ActionOnFailure", n), failureAction)
 			v.Set(fmt.Sprintf("Steps.member.%d.HadoopJarStep.Jar", n), "/home/hadoop/contrib/streaming/hadoop-streaming.jar")
 
 			i := func() func() int {
@@ -712,7 +707,7 @@ func (m *IdentityMapperTool) Description() string {
 	return "identity mapper"
 }
 func (m *IdentityMapperTool) Run(args []string) {
-	bufferedCopy()
+	io.Copy(os.Stdout, os.Stdin)
 }
 
 type IdentityMapper struct {
@@ -767,14 +762,7 @@ func (m *IdentityReducerTool) Description() string {
 	return "identity reducer"
 }
 func (m *IdentityReducerTool) Run(args []string) {
-	bufferedCopy()
-}
-
-func bufferedCopy() {
-	r := bufio.NewReader(os.Stdin)
-	w := bufio.NewWriter(os.Stdout)
-	defer w.Flush()
-	io.Copy(w, r)
+	io.Copy(os.Stdout, os.Stdin)
 }
 
 type IntegerSumReducer struct {
@@ -819,4 +807,52 @@ func StartTicker(ch chan<- Count) {
 
 func tick(dur time.Duration, ch chan<- Count) {
 	ch <- Count{Group: "ticks", Counter: fmt.Sprintf("%v", dur), Amount: 1}
+}
+
+func SlurpLines(r io.Reader, f func(string)) error {
+	b := bufio.NewReader(r)
+	for {
+		line, err := b.ReadString('\n')
+		if err != nil && err != io.EOF {
+			return err
+		}
+		line = trimEOL(line)
+		if len(line) > 0 {
+			f(line)
+		}
+		if err == io.EOF {
+			break
+		}
+	}
+	return nil
+}
+
+func trimEOL(line string) string {
+	for {
+		if strings.HasSuffix(line, "\n") || strings.HasSuffix(line, "\r") {
+			line = line[:len(line)-1]
+		} else {
+			break
+		}
+	}
+	return line
+}
+
+func ReassembleLine(kv KeyValue) string {
+	if len(kv.Value) == 0 {
+		return fmt.Sprintf("%s", kv.Key)
+	} else {
+		return fmt.Sprintf("%s\t%s", kv.Key, kv.Value)
+	}
+}
+
+func ParseLine(line string) KeyValue {
+	i := strings.Index(line, "\t")
+	if i >= 0 {
+		key := line[:i]
+		value := line[i+1:]
+		return KeyValue{Key: key, Value: value}
+	} else {
+		return KeyValue{Key: line}
+	}
 }

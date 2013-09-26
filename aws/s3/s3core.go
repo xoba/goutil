@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -75,6 +76,54 @@ func list(auth aws.Auth, req ListRequest) (out ListBucketResult, err error) {
 
 func createURL(o Object) (*url.URL, error) {
 	return url.Parse("https://s3.amazonaws.com/" + esc(o.Bucket) + "/" + esc(o.Key))
+}
+
+func head(auth aws.Auth, req Object) (*HeadResponse, error) {
+	u, err := createURL(req)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	sig, err := signHead(u.Path, auth, now)
+	if err != nil {
+		return nil, err
+	}
+	transport := http.DefaultTransport
+	hreq, err := http.NewRequest("HEAD", u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	hreq.Header.Add("Date", format(now))
+	hreq.Header.Add("Authorization", "AWS "+auth.AccessKey+":"+sig)
+	resp, err := transport.RoundTrip(hreq)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != 200 {
+		return nil, errors.New(resp.Status)
+	}
+
+	cl, err := strconv.ParseUint(resp.Header.Get("Content-Length"), 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	etag := resp.Header.Get("Etag")
+	etag = strings.Replace(etag, `"`, "", -1)
+
+	t, err := time.ParseInLocation("Mon, 02 Jan 2006 15:04:05 MST", resp.Header.Get("Last-Modified"), time.UTC)
+	if err != nil {
+		return nil, err
+	}
+
+	hr := &HeadResponse{
+		Etag:          etag,
+		ContentType:   resp.Header.Get("Content-Type"),
+		ContentLength: int(cl),
+		LastModified:  t,
+	}
+
+	return hr, nil
 }
 
 func get(auth aws.Auth, req GetRequest) (io.ReadCloser, error) {
@@ -143,6 +192,44 @@ func getObject(auth aws.Auth, req GetRequest) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+func cp(auth aws.Auth, req CopyRequest) (err error) {
+	u, err := createURL(req.To)
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	transport := http.DefaultTransport
+	hreq, err := http.NewRequest("PUT", u.String(), nil)
+	if err != nil {
+		return err
+	}
+	hreq.Header.Add("Date", format(now))
+	hreq.Header.Add("x-amz-copy-source", "/"+req.From.Bucket+"/"+req.From.Key)
+	sig, err := signCopy(u.Path, auth, now, req.From)
+	if err != nil {
+		return
+	}
+	hreq.Header.Add("Authorization", "AWS "+auth.AccessKey+":"+sig)
+	resp, err := transport.RoundTrip(hreq)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return errors.New(resp.Status)
+	}
+	return nil
+}
+
+func signCopy(path string, a aws.Auth, t time.Time, from Object) (string, error) {
+	xx := "x-amz-copy-source:/" + from.Bucket + "/" + from.Key
+	return sign(a, "PUT"+N+N+N+format(t)+N+xx+N+path)
+}
+
+func signPut(path string, ct string, a aws.Auth, t time.Time) (string, error) {
+	return sign(a, "PUT"+N+N+ct+N+format(t)+N+path)
 }
 
 func put(auth aws.Auth, req PutRequest) (err error) {
@@ -226,9 +313,8 @@ func format(t time.Time) string {
 func signGet(path string, a aws.Auth, t time.Time) (string, error) {
 	return sign(a, "GET"+N+N+N+format(t)+N+path)
 }
-
-func signPut(path string, ct string, a aws.Auth, t time.Time) (string, error) {
-	return sign(a, "PUT"+N+N+ct+N+format(t)+N+path)
+func signHead(path string, a aws.Auth, t time.Time) (string, error) {
+	return sign(a, "HEAD"+N+N+N+format(t)+N+path)
 }
 
 func signList(path string, a aws.Auth, t time.Time) (string, error) {

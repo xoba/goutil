@@ -38,6 +38,18 @@ type RetryStrategyInstance interface {
 	Retry() bool
 }
 
+type NoRetryStrategy struct {
+}
+type NoRetryStrategyInstance struct {
+}
+
+func (NoRetryStrategyInstance) Retry() bool {
+	return false
+}
+func (NoRetryStrategy) NewInstance() RetryStrategyInstance {
+	return NoRetryStrategyInstance{}
+}
+
 type RetryBackoffStratInstance struct {
 	retries int
 	factor  float64
