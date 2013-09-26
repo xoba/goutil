@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"github.com/xoba/goutil/aws"
 	"github.com/xoba/goutil/aws/s3"
+	"math/rand"
 	"net/url"
 	"os/exec"
 	"runtime"
@@ -120,6 +121,12 @@ func (f *FlowsResponse) GetStep(name string) *StepMember {
 }
 
 func LoadLines(ss3 s3.Interface, output *StepOutput, f func(string, *KeyValue)) {
+	decider := func(string) bool {
+		return true
+	}
+	LoadLines2(ss3, output, runtime.NumCPU(), decider, f)
+}
+func LoadLines2(ss3 s3.Interface, output *StepOutput, threads int, fileDecider func(string) bool, f func(string, *KeyValue)) {
 	var wg, wg2 sync.WaitGroup
 	ch2 := make(chan *FileKeyValue)
 	ch := make(chan s3.Object)
@@ -130,28 +137,31 @@ func LoadLines(ss3 s3.Interface, output *StepOutput, f func(string, *KeyValue)) 
 		}
 		wg2.Done()
 	}()
-	for i := 0; i < runtime.NumCPU(); i++ {
+	for i := 0; i < threads; i++ {
 		wg.Add(1)
 		go func() {
 			for o := range ch {
-				r, err := ss3.Get(s3.GetRequest{o})
-				check(err)
-				defer r.Close()
-				if strings.HasSuffix(o.Key, ".gz") {
-					r, err = gzip.NewReader(r)
+				fn := o.Bucket + "/" + o.Key
+				if fileDecider(fn) {
+					r, err := ss3.Get(s3.GetRequest{o})
 					check(err)
-				}
-
-				scanner := bufio.NewScanner(r)
-				for scanner.Scan() {
-					kv := ParseLine(scanner.Text())
-					ch2 <- &FileKeyValue{
-						Filename: o.Bucket + "/" + o.Key,
-						Item:     &kv,
+					defer r.Close()
+					if strings.HasSuffix(o.Key, ".gz") {
+						r, err = gzip.NewReader(r)
+						check(err)
 					}
-				}
-				if err := scanner.Err(); err != nil {
-					panic(err)
+
+					scanner := bufio.NewScanner(r)
+					for scanner.Scan() {
+						kv := ParseLine(scanner.Text())
+						ch2 <- &FileKeyValue{
+							Filename: fn,
+							Item:     &kv,
+						}
+					}
+					if err := scanner.Err(); err != nil {
+						panic(err)
+					}
 				}
 			}
 			wg.Done()
@@ -168,6 +178,7 @@ type FileKeyValue struct {
 	Item     *KeyValue
 }
 
+// randomize order of each listing batch
 func List(ss3 s3.Interface, output *StepOutput, ch chan s3.Object) {
 	var marker string
 	for {
@@ -175,9 +186,14 @@ func List(ss3 s3.Interface, output *StepOutput, ch chan s3.Object) {
 		if err != nil {
 			panic(err)
 		}
-		for _, v := range r.Contents {
+
+		p := rand.Perm(len(r.Contents))
+
+		for i := 0; i < len(r.Contents); i++ {
+			v := r.Contents[p[i]]
 			ch <- s3.Object{Bucket: output.Bucket, Key: v.Key}
 		}
+
 		if r.IsTruncated {
 			marker = r.Contents[len(r.Contents)-1].Key
 		} else {

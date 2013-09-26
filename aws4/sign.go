@@ -1,5 +1,7 @@
-// Package aws4 signs HTTP requests as prescribed in
-// http://docs.amazonwebservices.com/general/latest/gr/signature-version-4.html
+/* aws signature method 4.
+
+see http://docs.amazonwebservices.com/general/latest/gr/signature-version-4.html
+*/
 package aws4
 
 /*

@@ -1,4 +1,4 @@
-// various statistical routines
+// various statistical routines.
 package stats
 
 import (

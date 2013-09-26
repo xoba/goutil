@@ -1,4 +1,4 @@
-// various utilities for go-lang
+// various utilities for go-lang.
 package goutil
 
 import (

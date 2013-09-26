@@ -1,4 +1,4 @@
-// simple smtp client
+// simple smtp client.
 package smtpc
 
 import (
