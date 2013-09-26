@@ -1,6 +1,5 @@
 /*
-
- logging for the purposes of analysis later on (i.e., the basis of big data)
+logging for the purposes of analysis later on.
 
 */
 package logging

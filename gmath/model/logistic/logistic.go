@@ -1,4 +1,4 @@
-// logistic modelling example
+// logistic modelling example.
 package logistic
 
 import (

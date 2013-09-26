@@ -1,4 +1,4 @@
-// code for accessing s3
+// code for accessing s3.
 package s3
 
 import (

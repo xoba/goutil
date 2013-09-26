@@ -1,4 +1,4 @@
-// use modelling code on well-known prostate cancer data, check we get same results
+// use modelling code on well-known prostate cancer data, check we get same results.
 package cancer
 
 import (

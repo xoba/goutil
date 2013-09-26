@@ -1,4 +1,4 @@
-// reader factory
+// reader factory.
 package rf
 
 import (

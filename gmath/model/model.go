@@ -1,6 +1,7 @@
 /*
+modelling routines.
 
-modelling routines, focused on gps algorithm from http://www-stat.stanford.edu/~jhf/ftp/GPSpub.pdf‎
+focused on gps algorithm from http://www-stat.stanford.edu/~jhf/ftp/GPSpub.pdf
 
 */
 package model
