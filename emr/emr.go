@@ -809,6 +809,22 @@ func tick(dur time.Duration, ch chan<- Count) {
 	ch <- Count{Group: "ticks", Counter: fmt.Sprintf("%v", dur), Amount: 1}
 }
 
+type Slurper struct {
+}
+
+func (*Slurper) Name() string {
+	return "slurp,play with slurper"
+}
+func (t *Slurper) Run(args []string) {
+	fmt.Println("slurping...")
+	var lines int
+	SlurpLines(os.Stdin, func(line string) {
+		fmt.Printf("%q\n", line)
+		lines++
+	})
+	fmt.Printf("%d lines\n", lines)
+}
+
 func SlurpLines(r io.Reader, f func(string)) error {
 	b := bufio.NewReader(r)
 	for {
@@ -816,7 +832,7 @@ func SlurpLines(r io.Reader, f func(string)) error {
 		if err != nil && err != io.EOF {
 			return err
 		}
-		line = trimEOL(line)
+		line = trimEOLs(line)
 		if len(line) > 0 {
 			f(line)
 		}
@@ -827,12 +843,16 @@ func SlurpLines(r io.Reader, f func(string)) error {
 	return nil
 }
 
-func trimEOL(line string) string {
-	for {
-		if strings.HasSuffix(line, "\n") || strings.HasSuffix(line, "\r") {
+func trimEOLs(line string) string {
+	done := false
+	for !done {
+		switch {
+		case strings.HasSuffix(line, "\r") || strings.HasSuffix(line, "\n"):
 			line = line[:len(line)-1]
-		} else {
-			break
+		case strings.HasPrefix(line, "\r") || strings.HasPrefix(line, "\n"):
+			line = line[1:]
+		default:
+			done = true
 		}
 	}
 	return line
