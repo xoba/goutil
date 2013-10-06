@@ -2,6 +2,7 @@ package s3
 
 import (
 	"bytes"
+	"compress/gzip"
 	"crypto/hmac"
 	"crypto/sha1"
 	"encoding/base64"
@@ -271,6 +272,18 @@ func put(auth aws.Auth, req PutRequest) (err error) {
 	return nil
 }
 
+func compress(b []byte) []byte {
+	fmt.Printf("compressing %d bytes\n", len(b))
+	var w bytes.Buffer
+	gz := gzip.NewWriter(&w)
+	r := bytes.NewBuffer(b)
+	io.Copy(gz, r)
+	gz.Close()
+	out := w.Bytes()
+	fmt.Printf("compressed to %d bytes\n", len(out))
+	return out
+}
+
 func putObject(auth aws.Auth, req PutObjectRequest) (err error) {
 	u, err := createURL(req.Object)
 	if err != nil {
@@ -278,12 +291,23 @@ func putObject(auth aws.Auth, req PutObjectRequest) (err error) {
 	}
 	now := time.Now()
 	transport := http.DefaultTransport
-	reader := bytes.NewBuffer(req.Data)
+
+	data := req.Data
+
+	if req.Compress {
+		data = compress(data)
+	}
+
+	reader := bytes.NewBuffer(data)
+
 	hreq, err := http.NewRequest("PUT", u.String(), reader)
 	if err != nil {
 		return err
 	}
 	hreq.Header.Add("Date", format(now))
+	if req.Compress {
+		hreq.Header.Add("Content-Encoding", "gzip")
+	}
 	if len(req.ContentType) == 0 {
 		req.ContentType = mimeType(req.Object.Key)
 	}
@@ -291,9 +315,9 @@ func putObject(auth aws.Auth, req PutObjectRequest) (err error) {
 	if err != nil {
 		return
 	}
-	hreq.ContentLength = int64(len(req.Data))
+	hreq.ContentLength = int64(len(data))
 	hreq.Header.Add("Content-Type", req.ContentType)
-	hreq.Header.Add("Content-Length", string(len(req.Data)))
+	hreq.Header.Add("Content-Length", string(len(data)))
 	hreq.Header.Add("Authorization", "AWS "+auth.AccessKey+":"+sig)
 	resp, err := transport.RoundTrip(hreq)
 	if err != nil {

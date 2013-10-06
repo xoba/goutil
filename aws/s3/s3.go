@@ -48,6 +48,7 @@ type PutRequest struct {
 type PutObjectRequest struct {
 	Object      Object
 	ContentType string
+	Compress    bool
 	Data        []byte
 }
 

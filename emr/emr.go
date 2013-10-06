@@ -865,9 +865,12 @@ func ReassembleLine(kv KeyValue) string {
 		return fmt.Sprintf("%s\t%s", kv.Key, kv.Value)
 	}
 }
-
 func ParseLine(line string) KeyValue {
-	i := strings.Index(line, "\t")
+	return ParseLineSep(line, "\t")
+}
+
+func ParseLineSep(line, sep string) KeyValue {
+	i := strings.Index(line, sep)
 	if i >= 0 {
 		key := line[:i]
 		value := line[i+1:]
