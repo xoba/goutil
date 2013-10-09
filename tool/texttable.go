@@ -3,10 +3,24 @@ package tool
 import (
 	"bytes"
 	"fmt"
+	"sort"
 	"strings"
 )
 
 func FormatTextTable(borders bool, prefix string, cols []string, rows []map[string]string) string {
+
+	if cols == nil {
+		m := make(map[string]bool)
+		for _, x := range rows {
+			for k := range x {
+				m[k] = true
+			}
+		}
+		for k := range m {
+			cols = append(cols, k)
+		}
+		sort.Strings(cols)
+	}
 
 	{
 		header := make(map[string]string)

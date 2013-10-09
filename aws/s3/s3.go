@@ -3,6 +3,7 @@ package s3
 
 import (
 	"errors"
+	"fmt"
 	"github.com/xoba/goutil"
 	"github.com/xoba/goutil/aws"
 	"io"
@@ -66,6 +67,10 @@ type DeleteRequest struct {
 type Object struct {
 	Bucket string
 	Key    string
+}
+
+func (o Object) ToUrl() string {
+	return fmt.Sprintf("https://s3.amazonaws.com/%s/%s", o.Bucket, o.Key)
 }
 
 type ListBucketResultContents struct {
