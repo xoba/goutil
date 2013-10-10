@@ -273,14 +273,12 @@ func put(auth aws.Auth, req PutRequest) (err error) {
 }
 
 func compress(b []byte) []byte {
-	fmt.Printf("compressing %d bytes\n", len(b))
 	var w bytes.Buffer
 	gz := gzip.NewWriter(&w)
 	r := bytes.NewBuffer(b)
 	io.Copy(gz, r)
 	gz.Close()
 	out := w.Bytes()
-	fmt.Printf("compressed to %d bytes\n", len(out))
 	return out
 }
 
