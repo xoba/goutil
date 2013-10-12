@@ -49,6 +49,7 @@ func (o *Output) Close() {
 type MapContext struct {
 	Input <-chan KeyValue
 	Output
+	Filename string
 	Context
 }
 type ReduceContext struct {
@@ -78,6 +79,20 @@ type Count struct {
 	Amount         int
 }
 
+func grepContext() Context {
+	out := Context{Vars: make(map[string]string)}
+	for _, x := range os.Environ() {
+		parts := strings.Split(x, "=")
+		if len(parts) == 2 {
+			key := parts[0]
+			if strings.HasPrefix(key, VARS_PREFIX) {
+				out.Vars[key[len(VARS_PREFIX):]] = parts[1]
+			}
+		}
+	}
+	return out
+}
+
 func RunStreamingMapper(m Mapper) {
 
 	var wg sync.WaitGroup
@@ -97,6 +112,8 @@ func RunStreamingMapper(m Mapper) {
 				Counters:  counters,
 				Collector: collector,
 			},
+			Filename: os.Getenv("map_input_file"),
+			Context:  grepContext(),
 		})
 	}()
 
@@ -133,6 +150,7 @@ func RunStreamingReducer(r Reducer) {
 				Counters:  counters,
 				Collector: collector,
 			},
+			Context: grepContext(),
 		})
 		wg.Done()
 	}()
@@ -338,7 +356,7 @@ func Run(flow Flow) {
 			pair("-reducer", toUrl(reducerObject))
 
 			for k, x := range step.Vars {
-				pair("-cmdenv", fmt.Sprintf("%s=%s", k, x))
+				pair("-cmdenv", fmt.Sprintf("%s%s=%s", VARS_PREFIX, k, x))
 			}
 		}
 
@@ -360,6 +378,8 @@ func Run(flow Flow) {
 	fmt.Print(string(runReq(u)))
 
 }
+
+const VARS_PREFIX = "EMR_VARS_"
 
 func runOutput(wg *sync.WaitGroup, collector chan KeyValue) {
 	defer wg.Done()
