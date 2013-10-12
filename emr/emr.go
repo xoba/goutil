@@ -858,13 +858,18 @@ func trimEOLs(line string) string {
 	return line
 }
 
-func ReassembleLine(kv KeyValue) string {
+func (kv KeyValue) String() string {
 	if len(kv.Value) == 0 {
 		return fmt.Sprintf("%s", kv.Key)
 	} else {
 		return fmt.Sprintf("%s\t%s", kv.Key, kv.Value)
 	}
 }
+
+func ReassembleLine(kv KeyValue) string {
+	return kv.String()
+}
+
 func ParseLine(line string) KeyValue {
 	return ParseLineSep(line, "\t")
 }
