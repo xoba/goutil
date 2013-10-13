@@ -14,6 +14,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -71,12 +72,18 @@ func list(auth aws.Auth, req ListRequest) (out ListBucketResult, err error) {
 	if err != nil {
 		return
 	}
-	xml.Unmarshal(buf.Bytes(), &out)
+	err = xml.Unmarshal(buf.Bytes(), &out)
+	if err != nil {
+		return
+	}
 	return
 }
 
 func createURL(o Object) (*url.URL, error) {
 	return url.Parse("https://s3.amazonaws.com/" + esc(o.Bucket) + "/" + esc(o.Key))
+}
+func createURL2() (*url.URL, error) {
+	return url.Parse("https://s3.amazonaws.com/")
 }
 
 func head(auth aws.Auth, req Object) (*HeadResponse, error) {
@@ -125,6 +132,43 @@ func head(auth aws.Auth, req Object) (*HeadResponse, error) {
 	}
 
 	return hr, nil
+}
+
+func buckets(auth aws.Auth) (*ListAllMyBucketsResult, error) {
+	u, err := createURL2()
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	sig, err := signGet(u.Path, auth, now)
+	if err != nil {
+		return nil, err
+	}
+	transport := http.DefaultTransport
+	hreq, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	hreq.Header.Add("Date", format(now))
+	hreq.Header.Add("Authorization", "AWS "+auth.AccessKey+":"+sig)
+	resp, err := transport.RoundTrip(hreq)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != 200 {
+		return nil, errors.New(resp.Status)
+	}
+	var out ListAllMyBucketsResult
+	if false {
+		io.Copy(os.Stdout, resp.Body)
+	} else {
+		d := xml.NewDecoder(resp.Body)
+		err = d.Decode(&out)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &out, nil
 }
 
 func get(auth aws.Auth, req GetRequest) (io.ReadCloser, error) {
@@ -373,6 +417,6 @@ func esc(s string) string {
 	}
 }
 
-func print(v interface{}) string {
+func str(v interface{}) string {
 	return fmt.Sprintf("%#v", v)
 }
