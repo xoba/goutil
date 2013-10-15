@@ -280,6 +280,19 @@ func Register(r Interface) {
 	tools[name] = r
 }
 
+// gets all tool names
+func Names() (out []string) {
+	for k := range tools {
+		out = append(out, k)
+	}
+	return
+}
+
+// gets the tool with given name
+func ForName(name string) Interface {
+	return tools[name]
+}
+
 func NewSequence(name, desc string, tools ...Interface) *Sequence {
 	return &Sequence{name: name, desc: desc, tools: tools}
 }

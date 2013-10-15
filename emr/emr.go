@@ -10,6 +10,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"flag"
 	"fmt"
 	"github.com/xoba/goutil/aws"
 	"github.com/xoba/goutil/aws/s3"
@@ -33,12 +34,27 @@ type Output struct {
 	Counters  chan<- Count
 }
 
-type Context struct {
-	Vars map[string]string `json:",omitempty"`
+type Context interface {
+	// like environment variables
+	Vars() map[string]string
+	// filename, could change for every keyvalue?
+	Filename() string
 }
 
-func (c *Context) Fail() {
-	os.Exit(1)
+type staticContext struct {
+	filename string
+	vars     map[string]string
+	args     []string
+}
+
+func (s *staticContext) Vars() map[string]string {
+	return s.vars
+}
+func (s *staticContext) Args() []string {
+	return s.args
+}
+func (s *staticContext) Filename() string {
+	return s.filename
 }
 
 func (o *Output) Close() {
@@ -49,9 +65,9 @@ func (o *Output) Close() {
 type MapContext struct {
 	Input <-chan KeyValue
 	Output
-	Filename string
 	Context
 }
+
 type ReduceContext struct {
 	Input <-chan ReduceJob
 	Output
@@ -79,21 +95,23 @@ type Count struct {
 	Amount         int
 }
 
-func grepContext() Context {
-	out := Context{Vars: make(map[string]string)}
+func grepStaticContext() *staticContext {
+	out := staticContext{filename: os.Getenv("map_input_file"), vars: make(map[string]string)}
+
+	// grep special vars from environment
 	for _, x := range os.Environ() {
 		parts := strings.Split(x, "=")
 		if len(parts) == 2 {
 			key := parts[0]
 			if strings.HasPrefix(key, VARS_PREFIX) {
-				out.Vars[key[len(VARS_PREFIX):]] = parts[1]
+				out.vars[key[len(VARS_PREFIX):]] = parts[1]
 			}
 		}
 	}
-	return out
+	return &out
 }
 
-func RunStreamingMapper(m Mapper) {
+func runStreamingMapper(r io.Reader, m Mapper) {
 
 	var wg sync.WaitGroup
 	defer wg.Wait()
@@ -112,8 +130,7 @@ func RunStreamingMapper(m Mapper) {
 				Counters:  counters,
 				Collector: collector,
 			},
-			Filename: os.Getenv("map_input_file"),
-			Context:  grepContext(),
+			Context: grepStaticContext(),
 		})
 	}()
 
@@ -123,7 +140,7 @@ func RunStreamingMapper(m Mapper) {
 	wg.Add(1)
 	go runCounters(&wg, counters)
 
-	err := SlurpLines(os.Stdin, func(line string) {
+	err := SlurpLines(r, func(line string) {
 		items <- ParseLine(line)
 	})
 	close(items)
@@ -133,7 +150,7 @@ func RunStreamingMapper(m Mapper) {
 	}
 }
 
-func RunStreamingReducer(r Reducer) {
+func runStreamingReducer(r Reducer) {
 
 	counters := make(chan Count)
 	collector := make(chan KeyValue)
@@ -150,7 +167,7 @@ func RunStreamingReducer(r Reducer) {
 				Counters:  counters,
 				Collector: collector,
 			},
-			Context: grepContext(),
+			Context: grepStaticContext(),
 		})
 		wg.Done()
 	}()
@@ -225,12 +242,15 @@ type Step struct {
 	Output             string
 	Reducers           int           `json:",omitempty"`
 	Timeout            time.Duration `json:",omitempty"`
-	Mapper, Reducer    tool.Interface
+	Mapper, Reducer    Streaming
 	Compress           bool        `json:",omitempty"`
 	CompressMapOutput  bool        `json:",omitempty"`
 	SortSecondKeyField bool        `json:",omitempty"`
 	ToolChecker        ToolChecker `json:",omitempty"`
-	Context
+	Vars               map[string]string
+
+	// this is a big one: determines whether input files are lists of url's or not
+	IndirectMapJob bool `json:",omitempty"`
 }
 
 func Run(flow Flow) {
@@ -299,7 +319,8 @@ func Run(flow Flow) {
 		mapperObject := s3.Object{Bucket: flow.ScriptBucket, Key: "mapper/" + id}
 		reducerObject := s3.Object{Bucket: flow.ScriptBucket, Key: "reducer/" + id}
 
-		check(ss3.PutObject(s3.PutObjectRequest{Object: mapperObject, ContentType: "application/octet-stream", Data: []byte(createScript(step.Mapper, step.ToolChecker))}))
+		check(ss3.PutObject(s3.PutObjectRequest{Object: mapperObject, ContentType: "application/octet-stream", Data: []byte(createScript(step.Mapper, step.ToolChecker, "-indirect", fmt.Sprintf("%v", step.IndirectMapJob)))}))
+
 		check(ss3.PutObject(s3.PutObjectRequest{Object: reducerObject, ContentType: "application/octet-stream", Data: []byte(createScript(step.Reducer, step.ToolChecker))}))
 
 		{
@@ -553,7 +574,7 @@ func LapackToolChecker(path string, t tool.Interface) error {
 	return nil
 }
 
-func createScript(t tool.Interface, checker ToolChecker) string {
+func createScript(t tool.Interface, checker ToolChecker, args ...string) string {
 
 	cmd := "go/bin/" + os.Args[0]
 
@@ -639,6 +660,18 @@ func NewHiddenMapTool(m Mapper, name, description string) *MapTool {
 	}
 }
 
+// streaming interface is basically just tool.Interface, but with a private method just to make sure
+// that nobody outside of this package can implement it! i.e., we control which kinds of tools can
+// be mappers and reducers
+type Streaming interface {
+	streamingMarker
+	tool.Interface
+}
+type streamingMarker interface {
+	// method does nothing, it's just a marker
+	emrMarker()
+}
+
 type MapTool struct {
 	mapper      Mapper
 	name        string
@@ -667,7 +700,20 @@ func (m *MapTool) Description() string {
 }
 
 func (m *MapTool) Run(args []string) {
-	RunStreamingMapper(m.mapper)
+
+	var indirect bool
+	flags := flag.NewFlagSet(m.Name(), flag.ExitOnError)
+	flags.BoolVar(&indirect, "indirect", false, "whether input files are indirect")
+	flags.Parse(args)
+
+	if indirect {
+
+	} else {
+		runStreamingMapper(os.Stdin, m.mapper)
+	}
+}
+
+func (m *MapTool) emrMarker() {
 }
 
 type ReduceTool struct {
@@ -675,6 +721,9 @@ type ReduceTool struct {
 	name        string
 	description string
 	hidden      bool
+}
+
+func (m *ReduceTool) emrMarker() {
 }
 
 func (t *ReduceTool) MarshalJSON() ([]byte, error) {
@@ -698,7 +747,7 @@ func (m *ReduceTool) Description() string {
 }
 
 func (m *ReduceTool) Run(args []string) {
-	RunStreamingReducer(m.reducer)
+	runStreamingReducer(m.reducer)
 }
 
 func marshal(i fmt.Stringer) ([]byte, error) {
@@ -708,6 +757,9 @@ func marshal(i fmt.Stringer) ([]byte, error) {
 type IdentityMapperTool struct {
 	Id      string
 	Taglist []string
+}
+
+func (m *IdentityMapperTool) emrMarker() {
 }
 
 func (t *IdentityMapperTool) MarshalJSON() ([]byte, error) {
@@ -763,6 +815,9 @@ func (s *IdentityReducer) Reduce(ctx ReduceContext) {
 type IdentityReducerTool struct {
 	Id      string
 	Taglist []string
+}
+
+func (m *IdentityReducerTool) emrMarker() {
 }
 
 func (t *IdentityReducerTool) MarshalJSON() ([]byte, error) {
