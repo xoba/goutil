@@ -5,10 +5,12 @@ import (
 	"bufio"
 	"bytes"
 	"code.google.com/p/go-uuid/uuid"
+	"compress/bzip2"
 	"compress/gzip"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -34,27 +36,9 @@ type Output struct {
 	Counters  chan<- Count
 }
 
-type Context interface {
-	// like environment variables
-	Vars() map[string]string
-	// filename, could change for every keyvalue?
-	Filename() string
-}
-
-type staticContext struct {
-	filename string
-	vars     map[string]string
-	args     []string
-}
-
-func (s *staticContext) Vars() map[string]string {
-	return s.vars
-}
-func (s *staticContext) Args() []string {
-	return s.args
-}
-func (s *staticContext) Filename() string {
-	return s.filename
+type Context struct {
+	Vars     map[string]string
+	Filename string
 }
 
 func (o *Output) Close() {
@@ -95,8 +79,11 @@ type Count struct {
 	Amount         int
 }
 
-func grepStaticContext() *staticContext {
-	out := staticContext{filename: os.Getenv("map_input_file"), vars: make(map[string]string)}
+func grepContext(fn string) Context {
+	if len(fn) == 0 {
+		fn = os.Getenv("map_input_file")
+	}
+	out := Context{Filename: fn, Vars: make(map[string]string)}
 
 	// grep special vars from environment
 	for _, x := range os.Environ() {
@@ -104,14 +91,14 @@ func grepStaticContext() *staticContext {
 		if len(parts) == 2 {
 			key := parts[0]
 			if strings.HasPrefix(key, VARS_PREFIX) {
-				out.vars[key[len(VARS_PREFIX):]] = parts[1]
+				out.Vars[key[len(VARS_PREFIX):]] = parts[1]
 			}
 		}
 	}
-	return &out
+	return out
 }
 
-func runStreamingMapper(r io.Reader, m Mapper) {
+func runStreamingMapper(r io.Reader, ctx Context, m Mapper) {
 
 	var wg sync.WaitGroup
 	defer wg.Wait()
@@ -130,7 +117,7 @@ func runStreamingMapper(r io.Reader, m Mapper) {
 				Counters:  counters,
 				Collector: collector,
 			},
-			Context: grepStaticContext(),
+			Context: ctx,
 		})
 	}()
 
@@ -167,7 +154,7 @@ func runStreamingReducer(r Reducer) {
 				Counters:  counters,
 				Collector: collector,
 			},
-			Context: grepStaticContext(),
+			Context: grepContext(""),
 		})
 		wg.Done()
 	}()
@@ -708,9 +695,64 @@ func (m *MapTool) Run(args []string) {
 
 	if indirect {
 
+		d := json.NewDecoder(os.Stdin)
+
+		for {
+			line := make(map[string]interface{})
+			err := d.Decode(&line)
+			switch {
+			case err == io.EOF:
+				return
+			case err != nil:
+				panic(err)
+			}
+
+			if fn, ok := line["file"]; ok {
+				func() {
+					name := fn.(string)
+					f, err := os.Open(name)
+					check(err)
+					defer f.Close()
+					runStreamingMapper(DecodeContent(name, f), grepContext(name), m.mapper)
+				}()
+			} else if u, ok := line["url"]; ok {
+				func() {
+					name := u.(string)
+					resp, err := http.Get(name)
+					check(err)
+					defer resp.Body.Close()
+					runStreamingMapper(DecodeContent(name, resp.Body), grepContext(name), m.mapper)
+				}()
+			} else {
+				panic(fmt.Errorf("nothing to map with %v", line))
+			}
+		}
+
 	} else {
-		runStreamingMapper(os.Stdin, m.mapper)
+		runStreamingMapper(os.Stdin, grepContext(""), m.mapper)
 	}
+}
+
+func DecodeContent(name string, r io.Reader) io.Reader {
+
+	swap := func(from io.Reader) {
+		r = from
+	}
+
+	switch {
+
+	case strings.HasSuffix(name, ".gz"):
+		r0, err := gzip.NewReader(r)
+		if err != nil {
+			panic(err)
+		}
+		swap(r0)
+
+	case strings.HasSuffix(name, ".bz2"):
+		r = bzip2.NewReader(r)
+	}
+
+	return r
 }
 
 func (m *MapTool) emrMarker() {
