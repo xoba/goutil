@@ -18,8 +18,15 @@ import (
 	"sync"
 )
 
+// should have a "default" key
 type ShowFlow struct {
-	Auth aws.Auth
+	Auth map[string]aws.Auth
+}
+
+func NewShowFlow(a aws.Auth) *ShowFlow {
+	m := make(map[string]aws.Auth)
+	m["default"] = a
+	return &ShowFlow{m}
 }
 
 func (m *ShowFlow) Name() string {
@@ -31,12 +38,25 @@ func (m *ShowFlow) Description() string {
 
 func (m *ShowFlow) Run(args []string) {
 
-	var flow string
+	var flow, auth string
 	flags := flag.NewFlagSet(m.Name(), flag.ExitOnError)
 	flags.StringVar(&flow, "id", "", "the job flow to debug")
+	flags.StringVar(&auth, "auth", "default", "the authorization to choose")
 	flags.Parse(args)
 
-	r := FetchFlow(m.Auth, flow)
+	a := func() aws.Auth {
+		switch {
+		case len(m.Auth) == 0:
+			panic("no authorizations")
+		case len(m.Auth) == 1:
+			for _, v := range m.Auth {
+				return v
+			}
+		}
+		return m.Auth[auth]
+	}()
+
+	r := FetchFlow(a, flow)
 
 	if buf, err := json.MarshalIndent(r, "", "  "); err == nil {
 		fmt.Println(string(buf))
