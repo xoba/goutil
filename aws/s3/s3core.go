@@ -303,6 +303,9 @@ func put(auth aws.Auth, req PutRequest) (err error) {
 	}
 	hreq.ContentLength = int64(req.ReaderFact.Len())
 	hreq.Header.Add("Content-Type", req.ContentType)
+	if len(req.ContentEncoding) > 0 {
+		hreq.Header.Add("Content-Encoding", req.ContentEncoding)
+	}
 	hreq.Header.Add("Content-Length", string(req.ReaderFact.Len()))
 	hreq.Header.Add("Authorization", "AWS "+auth.AccessKey+":"+sig)
 	resp, err := transport.RoundTrip(hreq)

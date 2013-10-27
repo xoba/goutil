@@ -56,9 +56,10 @@ type CopyRequest struct {
 }
 
 type PutRequest struct {
-	Object      Object
-	ContentType string
-	ReaderFact  goutil.ReaderFactory
+	Object          Object
+	ContentEncoding string
+	ContentType     string
+	ReaderFact      goutil.ReaderFactory
 }
 
 type PutObjectRequest struct {
