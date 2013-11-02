@@ -12,6 +12,7 @@ import (
 	"github.com/xoba/goutil/aws/s3"
 	"math/rand"
 	"net/url"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -68,9 +69,16 @@ func (m *ShowFlow) Run(args []string) {
 
 	if len(r.MasterDNS) > 0 {
 
+		dir := fmt.Sprintf("/run/shm/chrome/chrome_%s", uuid.New())
+
+		os.MkdirAll(dir, os.ModePerm)
+
+		f, err := os.Create(dir + "/First Run")
+		check(err)
+		f.Close()
+
 		cmd := exec.Command("google-chrome",
-			fmt.Sprintf("--user-data-dir=/run/shm/chrome/chrome_%s",
-				uuid.New()),
+			fmt.Sprintf("--user-data-dir=%s", dir),
 			"--app-window-size=1280,1024", fmt.Sprintf("--app=http://%s:9100", r.MasterDNS))
 
 		cmd.Dir = "/tmp"
