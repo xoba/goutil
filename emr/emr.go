@@ -306,7 +306,7 @@ func Run(flow Flow) {
 		mapperObject := s3.Object{Bucket: flow.ScriptBucket, Key: "mapper/" + id}
 		reducerObject := s3.Object{Bucket: flow.ScriptBucket, Key: "reducer/" + id}
 
-		check(ss3.PutObject(s3.PutObjectRequest{Object: mapperObject, ContentType: "application/octet-stream", Data: []byte(createScript(step.Mapper, step.ToolChecker, "-indirect", fmt.Sprintf("%v", step.IndirectMapJob)))}))
+		check(ss3.PutObject(s3.PutObjectRequest{Object: mapperObject, ContentType: "application/octet-stream", Data: []byte(createScript(step.Mapper, step.ToolChecker, fmt.Sprintf("-indirect=%v", step.IndirectMapJob)))}))
 
 		check(ss3.PutObject(s3.PutObjectRequest{Object: reducerObject, ContentType: "application/octet-stream", Data: []byte(createScript(step.Reducer, step.ToolChecker))}))
 
@@ -599,7 +599,23 @@ func createScript(t tool.Interface, checker ToolChecker, args ...string) string 
 	w2(split(base64.StdEncoding.EncodeToString(buf)))
 	w("END_TEXT")
 	w("/bin/chmod 777 $CMD")
-	w(fmt.Sprintf("$CMD %s", t.Name()))
+
+	run := func() string {
+		f := new(bytes.Buffer)
+		fmt.Fprintf(f, "$CMD %s", t.Name())
+		for _, a := range args {
+			fmt.Fprintf(f, " %s", a)
+		}
+		return string(f.Bytes())
+	}()
+
+	if false {
+		fmt.Println(run)
+		os.Exit(0)
+	}
+
+	w(run)
+
 	w("/bin/rm $CMD")
 
 	return string(f.Bytes())
@@ -720,20 +736,30 @@ func (m *MapTool) Run(args []string) {
 				}()
 			} else if u, ok := line["url"]; ok {
 
-				fmt.Fprintf(os.Stderr, "reporter:counter:indirect,files,1\n")
-
 				func() {
+					fmt.Fprintf(os.Stderr, "reporter:counter:indirect,files.started,1\n")
+					defer fmt.Fprintf(os.Stderr, "reporter:counter:indirect,files.ended,1\n")
+
 					name := u.(string)
 					resp, err := http.Get(name)
 					if err == nil {
 						defer resp.Body.Close()
-						dc, err := DecodeContent(name, resp.Body)
+
+						counter := &Counter{r: resp.Body}
+
+						defer func() {
+							fmt.Fprintf(os.Stderr, "reporter:counter:indirect,bytes,%d\n", counter.GetBytes())
+						}()
+
+						dc, err := DecodeContent(name, counter)
 						if err == nil {
 							runStreamingMapper(dc, grepContext(name), m.mapper)
 						} else {
+							fmt.Fprintf(os.Stderr, "reporter:counter:indirect,files.error1,1\n")
 							// somehow, handle error
 						}
 					} else {
+						fmt.Fprintf(os.Stderr, "reporter:counter:indirect,files.error2,1\n")
 						// handle file open error
 					}
 				}()
@@ -745,6 +771,21 @@ func (m *MapTool) Run(args []string) {
 	} else {
 		runStreamingMapper(os.Stdin, grepContext(""), m.mapper)
 	}
+}
+
+type Counter struct {
+	r     io.Reader
+	count int
+}
+
+func (c *Counter) GetBytes() int {
+	return c.count
+}
+
+func (c *Counter) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.count += n
+	return n, err
 }
 
 func DecodeContent(name string, r io.Reader) (io.Reader, error) {
