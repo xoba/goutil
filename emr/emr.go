@@ -133,7 +133,7 @@ func runStreamingMapper(r io.Reader, ctx Context, m Mapper) {
 	close(items)
 
 	if err != nil {
-		os.Exit(1)
+		// somehow, handle error
 	}
 }
 
@@ -713,18 +713,32 @@ func (m *MapTool) Run(args []string) {
 					f, err := os.Open(name)
 					check(err)
 					defer f.Close()
-					runStreamingMapper(DecodeContent(name, f), grepContext(name), m.mapper)
+
+					dc, err := DecodeContent(name, f)
+					check(err)
+					runStreamingMapper(dc, grepContext(name), m.mapper)
 				}()
 			} else if u, ok := line["url"]; ok {
+
+				fmt.Fprintf(os.Stderr, "reporter:counter:indirect,files,1\n")
+
 				func() {
 					name := u.(string)
 					resp, err := http.Get(name)
-					check(err)
-					defer resp.Body.Close()
-					runStreamingMapper(DecodeContent(name, resp.Body), grepContext(name), m.mapper)
+					if err == nil {
+						defer resp.Body.Close()
+						dc, err := DecodeContent(name, resp.Body)
+						if err == nil {
+							runStreamingMapper(dc, grepContext(name), m.mapper)
+						} else {
+							// somehow, handle error
+						}
+					} else {
+						// handle file open error
+					}
 				}()
 			} else {
-				panic(fmt.Errorf("nothing to map with %v", line))
+				// somehow, check for error
 			}
 		}
 
@@ -733,7 +747,7 @@ func (m *MapTool) Run(args []string) {
 	}
 }
 
-func DecodeContent(name string, r io.Reader) io.Reader {
+func DecodeContent(name string, r io.Reader) (io.Reader, error) {
 
 	swap := func(from io.Reader) {
 		r = from
@@ -744,7 +758,7 @@ func DecodeContent(name string, r io.Reader) io.Reader {
 	case strings.HasSuffix(name, ".gz"):
 		r0, err := gzip.NewReader(r)
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 		swap(r0)
 
@@ -752,7 +766,7 @@ func DecodeContent(name string, r io.Reader) io.Reader {
 		r = bzip2.NewReader(r)
 	}
 
-	return r
+	return r, nil
 }
 
 func (m *MapTool) emrMarker() {
