@@ -741,30 +741,29 @@ func (m *MapTool) Run(args []string) {
 					defer fmt.Fprintf(os.Stderr, "reporter:counter:indirect,files.ended,1\n")
 
 					name := u.(string)
-					resp, err := http.Get(name)
-					if err == nil {
-						defer resp.Body.Close()
 
-						counter := &Counter{r: resp.Body}
+					r, err := StreamUrl(name)
+
+					if err == nil {
+						defer r.Close()
+
+						counter := &Counter{r: r}
 
 						defer func() {
 							fmt.Fprintf(os.Stderr, "reporter:counter:indirect,bytes,%d\n", counter.GetBytes())
 						}()
 
-						dc, err := DecodeContent(name, counter)
-						if err == nil {
-							runStreamingMapper(dc, grepContext(name), m.mapper)
-						} else {
-							fmt.Fprintf(os.Stderr, "reporter:counter:indirect,files.error1,1\n")
-							// somehow, handle error
-						}
+						runStreamingMapper(counter, grepContext(name), m.mapper)
+
 					} else {
 						fmt.Fprintf(os.Stderr, "reporter:counter:indirect,files.error2,1\n")
 						// handle file open error
+						fmt.Printf("error2 %s; %s; %v\t1\n", os.Getenv("map_input_file"), line, err)
 					}
 				}()
 			} else {
 				// somehow, check for error
+				fmt.Printf("error3 %s\t1\n", os.Getenv("map_input_file"))
 			}
 		}
 
@@ -786,6 +785,45 @@ func (c *Counter) Read(p []byte) (int, error) {
 	n, err := c.r.Read(p)
 	c.count += n
 	return n, err
+}
+
+func StreamUrl(u string) (io.ReadCloser, error) {
+	tr := &http.Transport{
+		DisableCompression: true,
+	}
+	client := &http.Client{Transport: tr}
+	resp, err := client.Get(u)
+	if err != nil {
+		return nil, err
+	}
+
+	r := resp.Body
+
+	bz := strings.HasSuffix(u, ".bz2")
+	gz := strings.HasSuffix(u, ".gz")
+
+	switch {
+
+	case gz:
+		r0, err := gzip.NewReader(r)
+		if err != nil {
+			return nil, err
+		}
+		return r0, nil
+
+	case bz:
+		return &readCloser{bzip2.NewReader(r)}, nil
+	}
+
+	return r, nil
+}
+
+type readCloser struct {
+	io.Reader
+}
+
+func (r *readCloser) Close() error {
+	return nil
 }
 
 func DecodeContent(name string, r io.Reader) (io.Reader, error) {
