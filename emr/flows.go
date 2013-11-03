@@ -79,7 +79,7 @@ func (m *ShowFlow) Run(args []string) {
 
 		cmd := exec.Command("google-chrome",
 			fmt.Sprintf("--user-data-dir=%s", dir),
-			"--app-window-size=1280,1024", fmt.Sprintf("--app=http://%s:9100", r.MasterDNS))
+			"--window-size=1280,1024", fmt.Sprintf("http://%s:9100", r.MasterDNS))
 
 		cmd.Dir = "/tmp"
 

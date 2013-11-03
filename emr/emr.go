@@ -80,9 +80,15 @@ type Count struct {
 }
 
 func grepContext(fn string) Context {
+
+	env := os.Getenv("map_input_file")
+
 	if len(fn) == 0 {
-		fn = os.Getenv("map_input_file")
+		fn = env
+	} else {
+		fn = fn + " (" + env + ")"
 	}
+
 	out := Context{Filename: fn, Vars: make(map[string]string)}
 
 	// grep special vars from environment
@@ -230,11 +236,11 @@ type Step struct {
 	Reducers           int           `json:",omitempty"`
 	Timeout            time.Duration `json:",omitempty"`
 	Mapper, Reducer    Streaming
-	Compress           bool        `json:",omitempty"`
-	CompressMapOutput  bool        `json:",omitempty"`
-	SortSecondKeyField bool        `json:",omitempty"`
-	ToolChecker        ToolChecker `json:",omitempty"`
-	Vars               map[string]string
+	Compress           bool              `json:",omitempty"`
+	CompressMapOutput  bool              `json:",omitempty"`
+	SortSecondKeyField bool              `json:",omitempty"`
+	ToolChecker        ToolChecker       `json:",omitempty"`
+	Vars               map[string]string `json:",omitempty"`
 
 	// this is a big one: determines whether input files are lists of url's or not
 	IndirectMapJob bool `json:",omitempty"`
@@ -734,6 +740,7 @@ func (m *MapTool) Run(args []string) {
 					check(err)
 					runStreamingMapper(dc, grepContext(name), m.mapper)
 				}()
+
 			} else if u, ok := line["url"]; ok {
 
 				func() {
