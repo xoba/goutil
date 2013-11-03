@@ -111,12 +111,20 @@ type StepMember struct {
 	Args []string `xml:"StepConfig>HadoopJarStep>Args>member"`
 }
 
-type StepOutput struct {
+type StepLocation struct {
 	Bucket string
 	Prefix string
 }
 
-func (s *StepMember) Output() *StepOutput {
+func (s *StepMember) Input() *StepLocation {
+	return s.location("-input")
+}
+
+func (s *StepMember) Output() *StepLocation {
+	return s.location("-output")
+}
+
+func (s *StepMember) location(name string) *StepLocation {
 	var next bool
 	for _, x := range s.Args {
 		if next {
@@ -124,9 +132,9 @@ func (s *StepMember) Output() *StepOutput {
 			if err != nil {
 				return nil
 			}
-			return &StepOutput{Bucket: u.Host, Prefix: u.Path[1:]}
+			return &StepLocation{Bucket: u.Host, Prefix: u.Path[1:]}
 		}
-		if x == "-output" {
+		if x == name {
 			next = true
 		}
 	}
@@ -148,13 +156,13 @@ func (f *FlowsResponse) GetStep(name string) *StepMember {
 	return nil
 }
 
-func LoadLines(ss3 s3.Interface, output *StepOutput, f func(string, *KeyValue)) {
+func LoadLines(ss3 s3.Interface, output *StepLocation, f func(string, *KeyValue)) {
 	decider := func(string) bool {
 		return true
 	}
 	LoadLines2(ss3, output, runtime.NumCPU(), decider, f)
 }
-func LoadLines2(ss3 s3.Interface, output *StepOutput, threads int, fileDecider func(string) bool, f func(string, *KeyValue)) {
+func LoadLines2(ss3 s3.Interface, output *StepLocation, threads int, fileDecider func(string) bool, f func(string, *KeyValue)) {
 	var wg, wg2 sync.WaitGroup
 	ch2 := make(chan *FileKeyValue)
 	ch := make(chan s3.Object)
@@ -207,7 +215,7 @@ type FileKeyValue struct {
 }
 
 // randomize order of each listing batch
-func List(ss3 s3.Interface, output *StepOutput, ch chan s3.Object) {
+func List(ss3 s3.Interface, output *StepLocation, ch chan s3.Object) {
 	var marker string
 	for {
 		r, err := ss3.List(s3.ListRequest{MaxKeys: 1000, Bucket: output.Bucket, Prefix: output.Prefix, Marker: marker})

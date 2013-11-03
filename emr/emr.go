@@ -393,10 +393,8 @@ const VARS_PREFIX = "EMR_VARS_"
 
 func runOutput(wg *sync.WaitGroup, collector chan KeyValue) {
 	defer wg.Done()
-	out := bufio.NewWriter(os.Stdout)
-	defer out.Flush()
 	for kv := range collector {
-		out.WriteString(fmt.Sprintf("%s\t%s\n", kv.Key, kv.Value))
+		os.Stdout.WriteString(fmt.Sprintf("%s\t%s\n", kv.Key, kv.Value))
 	}
 }
 
@@ -713,61 +711,53 @@ func (m *MapTool) Run(args []string) {
 
 	if indirect {
 
-		d := json.NewDecoder(os.Stdin)
-
-		for {
-			line := make(map[string]interface{})
-			err := d.Decode(&line)
-			switch {
-			case err == io.EOF:
-				return
-			case err != nil:
-				panic(err)
+		urls, err := func() ([]string, error) {
+			var out []string
+			d := json.NewDecoder(os.Stdin)
+			for {
+				line := make(map[string]string)
+				err := d.Decode(&line)
+				if err != nil {
+					return out, err
+				}
+				if u, ok := line["url"]; ok && len(u) > 0 {
+					out = append(out, u)
+				}
 			}
+		}()
 
-			if fn, ok := line["file"]; ok {
-				func() {
-					name := fn.(string)
-					f, err := os.Open(name)
-					check(err)
-					defer f.Close()
+		fmt.Fprintf(os.Stderr, "reporter:counter:indirect,files.found,%d\n", len(urls))
 
-					dc, err := DecodeContent(name, f)
-					check(err)
-					runStreamingMapper(dc, grepContext(name), m.mapper)
-				}()
+		if err != io.EOF {
+			fmt.Printf("error1; %s; %v\t1\n", os.Getenv("map_input_file"), err)
+		}
 
-			} else if u, ok := line["url"]; ok {
+		for _, u := range urls {
 
-				func() {
-					fmt.Fprintf(os.Stderr, "reporter:counter:indirect,files.started,1\n")
-					defer fmt.Fprintf(os.Stderr, "reporter:counter:indirect,files.ended,1\n")
+			func() {
+				fmt.Fprintf(os.Stderr, "reporter:counter:indirect,files.started,1\n")
+				defer fmt.Fprintf(os.Stderr, "reporter:counter:indirect,files.ended,1\n")
 
-					name := u.(string)
+				r, err := StreamUrl(u)
 
-					r, err := StreamUrl(name)
+				if err == nil {
+					defer r.Close()
 
-					if err == nil {
-						defer r.Close()
+					counter := &Counter{r: r}
 
-						counter := &Counter{r: r}
+					defer func() {
+						fmt.Fprintf(os.Stderr, "reporter:counter:indirect,bytes,%d\n", counter.GetBytes())
+					}()
 
-						defer func() {
-							fmt.Fprintf(os.Stderr, "reporter:counter:indirect,bytes,%d\n", counter.GetBytes())
-						}()
+					runStreamingMapper(counter, grepContext(u), m.mapper)
 
-						runStreamingMapper(counter, grepContext(name), m.mapper)
+				} else {
+					fmt.Fprintf(os.Stderr, "reporter:counter:indirect,files.error2,1\n")
+					// handle file open error
+					fmt.Printf("error2 %s; %s; %v\t1\n", os.Getenv("map_input_file"), u, err)
+				}
+			}()
 
-					} else {
-						fmt.Fprintf(os.Stderr, "reporter:counter:indirect,files.error2,1\n")
-						// handle file open error
-						fmt.Printf("error2 %s; %s; %v\t1\n", os.Getenv("map_input_file"), line, err)
-					}
-				}()
-			} else {
-				// somehow, check for error
-				fmt.Printf("error3 %s\t1\n", os.Getenv("map_input_file"))
-			}
 		}
 
 	} else {
@@ -995,7 +985,7 @@ func TicksDone(ch chan<- Count) {
 }
 
 func StartTicker(ch chan<- Count) {
-	dur := 3600 * time.Second / 4
+	dur := 300 * time.Second
 
 	tick(0, ch)
 
