@@ -31,20 +31,8 @@ import (
 	"time"
 )
 
-type Output struct {
-	Collector chan<- KeyValue
-	Counters  chan<- Count
-}
-
-type Context struct {
-	Vars     map[string]string
-	Filename string
-}
-
-func (o *Output) Close() {
-	close(o.Collector)
-	close(o.Counters)
-}
+type Mapper func(ctx MapContext)
+type Reducer func(ctx ReduceContext)
 
 type MapContext struct {
 	Input <-chan KeyValue
@@ -58,14 +46,6 @@ type ReduceContext struct {
 	Context
 }
 
-type Mapper interface {
-	Map(ctx MapContext)
-}
-
-type Reducer interface {
-	Reduce(ctx ReduceContext)
-}
-
 type KeyValue struct {
 	Key, Value string
 }
@@ -74,6 +54,22 @@ type ReduceJob struct {
 	Key    string
 	Values <-chan string
 }
+
+type Output struct {
+	Collector chan<- KeyValue
+	Counters  chan<- Count
+}
+
+func (o *Output) Close() {
+	close(o.Collector)
+	close(o.Counters)
+}
+
+type Context struct {
+	Vars     map[string]string
+	Filename string
+}
+
 type Count struct {
 	Group, Counter string
 	Amount         int
@@ -117,7 +113,7 @@ func runStreamingMapper(r io.Reader, ctx Context, m Mapper) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		m.Map(MapContext{
+		m(MapContext{
 			Input: items,
 			Output: Output{
 				Counters:  counters,
@@ -154,7 +150,7 @@ func runStreamingReducer(r Reducer) {
 
 	wg.Add(1)
 	go func() {
-		r.Reduce(ReduceContext{
+		r(ReduceContext{
 			Input: jobs,
 			Output: Output{
 				Counters:  counters,
@@ -924,10 +920,7 @@ func (m *IdentityMapperTool) Run(args []string) {
 	io.Copy(os.Stdout, os.Stdin)
 }
 
-type IdentityMapper struct {
-}
-
-func (m *IdentityMapper) Map(ctx MapContext) {
+func IdentityMap(ctx MapContext) {
 	defer ctx.Close()
 
 	StartTicker(ctx.Counters)
@@ -938,10 +931,7 @@ func (m *IdentityMapper) Map(ctx MapContext) {
 	}
 }
 
-type IdentityReducer struct {
-}
-
-func (s *IdentityReducer) Reduce(ctx ReduceContext) {
+func IdentityReduce(ctx ReduceContext) {
 	defer ctx.Close()
 
 	StartTicker(ctx.Counters)
@@ -982,10 +972,7 @@ func (m *IdentityReducerTool) Run(args []string) {
 	io.Copy(os.Stdout, os.Stdin)
 }
 
-type IntegerSumReducer struct {
-}
-
-func (s *IntegerSumReducer) Reduce(ctx ReduceContext) {
+func IntegerSumReduce(ctx ReduceContext) {
 	defer ctx.Close()
 
 	StartTicker(ctx.Counters)
