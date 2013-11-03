@@ -708,7 +708,7 @@ func (m *MapTool) Description() string {
 func runTicker(name string, d time.Duration) {
 	var c int
 	for {
-		count(name, fmt.Sprintf("%05d (%v)", c, time.Duration(c)*d), 1)
+		count(name, fmt.Sprintf("%05d * %v (%v)", c, d, time.Duration(c)*d), 1)
 		c++
 		time.Sleep(d)
 	}
@@ -876,7 +876,7 @@ func (m *ReduceTool) Description() string {
 	return m.description
 }
 
-const TICKER = 300 * time.Second
+const TICKER = 60 * time.Second
 
 func (m *ReduceTool) Run(args []string) {
 	go runTicker("reduce", TICKER)
