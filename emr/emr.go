@@ -708,7 +708,7 @@ func (m *MapTool) Description() string {
 func runTicker(name string, d time.Duration) {
 	var c int
 	for {
-		count(name, fmt.Sprintf("%v", time.Duration(c)*d), 1)
+		count(name, fmt.Sprintf("%05d (%v)", c, time.Duration(c)*d), 1)
 		c++
 		time.Sleep(d)
 	}
@@ -876,7 +876,7 @@ func (m *ReduceTool) Description() string {
 	return m.description
 }
 
-const TICKER = 60 * time.Second
+const TICKER = 300 * time.Second
 
 func (m *ReduceTool) Run(args []string) {
 	go runTicker("reduce", TICKER)
@@ -992,6 +992,7 @@ func (t *Slurper) Run(args []string) {
 	fmt.Printf("%d lines\n", lines)
 }
 
+// reads all lines, returns error, or nil on EOF
 func SlurpLines(r io.Reader, f func(string)) error {
 	b := bufio.NewReader(r)
 	for {
@@ -1004,12 +1005,12 @@ func SlurpLines(r io.Reader, f func(string)) error {
 			f(line)
 		}
 		if err == io.EOF {
-			break
+			return nil
 		}
 	}
-	return nil
 }
 
+// possibly a candidate for optimization?
 func trimEOLs(line string) string {
 	done := false
 	for !done {
