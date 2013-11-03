@@ -77,12 +77,8 @@ type Count struct {
 
 func grepContext(fn string) Context {
 
-	env := os.Getenv("map_input_file")
-
 	if len(fn) == 0 {
-		fn = env
-	} else {
-		fn = fn + " (" + env + ")"
+		fn = os.Getenv("map_input_file")
 	}
 
 	out := Context{Filename: fn, Vars: make(map[string]string)}
@@ -394,7 +390,7 @@ const VARS_PREFIX = "EMR_VARS_"
 func runOutput(wg *sync.WaitGroup, collector chan KeyValue) {
 	defer wg.Done()
 	for kv := range collector {
-		os.Stdout.WriteString(fmt.Sprintf("%s\t%s\n", kv.Key, kv.Value))
+		fmt.Fprintf(os.Stdout, "%s\t%s\n", kv.Key, kv.Value)
 	}
 }
 
@@ -409,8 +405,15 @@ func runCounters(wg *sync.WaitGroup, counters chan Count) {
 		if len(c.Counter) == 0 {
 			c.Counter = "job"
 		}
-		os.Stderr.Write([]byte(fmt.Sprintf("reporter:counter:%s,%s,%d\n", c.Group, c.Counter, c.Amount)))
+		count(c.Group, c.Counter, c.Amount)
 	}
+}
+
+func count(a, b string, amount int) {
+	r := func(s string) string {
+		return strings.Replace(s, ",", "_", -1)
+	}
+	fmt.Fprintf(os.Stderr, "reporter:counter:%s,%s,%d\n", r(a), r(b), amount)
 }
 
 func isNull(x string, s string) {
@@ -702,12 +705,23 @@ func (m *MapTool) Description() string {
 	return m.description
 }
 
+func runTicker(name string, d time.Duration) {
+	var c int
+	for {
+		count(name, fmt.Sprintf("%v", time.Duration(c)*d), 1)
+		c++
+		time.Sleep(d)
+	}
+}
+
 func (m *MapTool) Run(args []string) {
 
 	var indirect bool
 	flags := flag.NewFlagSet(m.Name(), flag.ExitOnError)
 	flags.BoolVar(&indirect, "indirect", false, "whether input files are indirect")
 	flags.Parse(args)
+
+	go runTicker("map", TICKER)
 
 	if indirect {
 
@@ -726,7 +740,7 @@ func (m *MapTool) Run(args []string) {
 			}
 		}()
 
-		fmt.Fprintf(os.Stderr, "reporter:counter:indirect,files.found,%d\n", len(urls))
+		count("indirect", "files.found", len(urls))
 
 		if err != io.EOF {
 			fmt.Printf("error1; %s; %v\t1\n", os.Getenv("map_input_file"), err)
@@ -735,24 +749,24 @@ func (m *MapTool) Run(args []string) {
 		for _, u := range urls {
 
 			func() {
-				fmt.Fprintf(os.Stderr, "reporter:counter:indirect,files.started,1\n")
-				defer fmt.Fprintf(os.Stderr, "reporter:counter:indirect,files.ended,1\n")
+				count("indirect", "files.started", 1)
+				defer count("indirect", "files.ended", 1)
 
-				r, err := StreamUrl(u)
+				r, err := StreamUrl(u, 0, 5, 1*time.Second)
 
 				if err == nil {
 					defer r.Close()
 
-					counter := &Counter{r: r}
+					counter := &counter{r: r}
 
 					defer func() {
-						fmt.Fprintf(os.Stderr, "reporter:counter:indirect,bytes,%d\n", counter.GetBytes())
+						count("indirect", "bytes", counter.GetBytes())
 					}()
 
 					runStreamingMapper(counter, grepContext(u), m.mapper)
 
 				} else {
-					fmt.Fprintf(os.Stderr, "reporter:counter:indirect,files.error2,1\n")
+					count("indirect", "files.error2", 1)
 					// handle file open error
 					fmt.Printf("error2 %s; %s; %v\t1\n", os.Getenv("map_input_file"), u, err)
 				}
@@ -765,29 +779,39 @@ func (m *MapTool) Run(args []string) {
 	}
 }
 
-type Counter struct {
+type counter struct {
 	r     io.Reader
 	count int
 }
 
-func (c *Counter) GetBytes() int {
+func (c *counter) GetBytes() int {
 	return c.count
 }
 
-func (c *Counter) Read(p []byte) (int, error) {
+func (c *counter) Read(p []byte) (int, error) {
 	n, err := c.r.Read(p)
 	c.count += n
 	return n, err
 }
 
-func StreamUrl(u string) (io.ReadCloser, error) {
+func StreamUrl(u string, attempt, max int, backoff time.Duration) (io.ReadCloser, error) {
+
+	retry := func() (io.ReadCloser, error) {
+		if attempt < max {
+			time.Sleep(backoff)
+			return StreamUrl(u, attempt+1, max, 2*backoff)
+		} else {
+			return nil, fmt.Errorf("max attempts failed for %s", u)
+		}
+	}
+
 	tr := &http.Transport{
 		DisableCompression: true,
 	}
 	client := &http.Client{Transport: tr}
 	resp, err := client.Get(u)
 	if err != nil {
-		return nil, err
+		return retry()
 	}
 
 	r := resp.Body
@@ -800,7 +824,7 @@ func StreamUrl(u string) (io.ReadCloser, error) {
 	case gz:
 		r0, err := gzip.NewReader(r)
 		if err != nil {
-			return nil, err
+			return retry()
 		}
 		return r0, nil
 
@@ -817,28 +841,6 @@ type readCloser struct {
 
 func (r *readCloser) Close() error {
 	return nil
-}
-
-func DecodeContent(name string, r io.Reader) (io.Reader, error) {
-
-	swap := func(from io.Reader) {
-		r = from
-	}
-
-	switch {
-
-	case strings.HasSuffix(name, ".gz"):
-		r0, err := gzip.NewReader(r)
-		if err != nil {
-			return nil, err
-		}
-		swap(r0)
-
-	case strings.HasSuffix(name, ".bz2"):
-		r = bzip2.NewReader(r)
-	}
-
-	return r, nil
 }
 
 func (m *MapTool) emrMarker() {
@@ -874,7 +876,10 @@ func (m *ReduceTool) Description() string {
 	return m.description
 }
 
+const TICKER = 60 * time.Second
+
 func (m *ReduceTool) Run(args []string) {
+	go runTicker("reduce", TICKER)
 	runStreamingReducer(m.reducer)
 }
 
@@ -913,9 +918,6 @@ func (m *IdentityMapperTool) Run(args []string) {
 func IdentityMap(ctx MapContext) {
 	defer ctx.Close()
 
-	StartTicker(ctx.Counters)
-	defer TicksDone(ctx.Counters)
-
 	for kv := range ctx.Input {
 		ctx.Collector <- kv
 	}
@@ -923,9 +925,6 @@ func IdentityMap(ctx MapContext) {
 
 func IdentityReduce(ctx ReduceContext) {
 	defer ctx.Close()
-
-	StartTicker(ctx.Counters)
-	defer TicksDone(ctx.Counters)
 
 	for j := range ctx.Input {
 		for v := range j.Values {
@@ -965,9 +964,6 @@ func (m *IdentityReducerTool) Run(args []string) {
 func IntegerSumReduce(ctx ReduceContext) {
 	defer ctx.Close()
 
-	StartTicker(ctx.Counters)
-	defer TicksDone(ctx.Counters)
-
 	for j := range ctx.Input {
 		var count int64
 		for v := range j.Values {
@@ -978,29 +974,6 @@ func IntegerSumReduce(ctx ReduceContext) {
 		}
 		ctx.Collector <- KeyValue{Key: j.Key, Value: fmt.Sprintf("%d", count)}
 	}
-}
-
-func TicksDone(ch chan<- Count) {
-	ch <- Count{Group: "ticks", Counter: "done", Amount: 1}
-}
-
-func StartTicker(ch chan<- Count) {
-	dur := 300 * time.Second
-
-	tick(0, ch)
-
-	go func() {
-		var count int
-		c := time.Tick(dur)
-		for _ = range c {
-			count++
-			tick(time.Duration(count)*dur, ch)
-		}
-	}()
-}
-
-func tick(dur time.Duration, ch chan<- Count) {
-	ch <- Count{Group: "ticks", Counter: fmt.Sprintf("%v", dur), Amount: 1}
 }
 
 type Slurper struct {
