@@ -55,12 +55,13 @@ type ReduceJob struct {
 	Values <-chan string
 }
 
+// mappers and reducers should not close these channels!
 type Output struct {
 	Collector chan<- KeyValue
 	Counters  chan<- Count
 }
 
-func (o *Output) Close() {
+func (o *Output) close() {
 	close(o.Collector)
 	close(o.Counters)
 }
@@ -109,12 +110,17 @@ func runStreamingMapper(r io.Reader, ctx Context, m Mapper) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+
+		output := Output{
+			Counters:  counters,
+			Collector: collector,
+		}
+
+		defer output.close()
+
 		m(MapContext{
-			Input: items,
-			Output: Output{
-				Counters:  counters,
-				Collector: collector,
-			},
+			Input:   items,
+			Output:  output,
 			Context: ctx,
 		})
 	}()
@@ -146,6 +152,15 @@ func runStreamingReducer(r Reducer) {
 
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
+
+		output := Output{
+			Counters:  counters,
+			Collector: collector,
+		}
+
+		defer output.close()
+
 		r(ReduceContext{
 			Input: jobs,
 			Output: Output{
@@ -154,7 +169,6 @@ func runStreamingReducer(r Reducer) {
 			},
 			Context: grepContext(""),
 		})
-		wg.Done()
 	}()
 
 	wg.Add(1)
@@ -916,16 +930,12 @@ func (m *IdentityMapperTool) Run(args []string) {
 }
 
 func IdentityMap(ctx MapContext) {
-	defer ctx.Close()
-
 	for kv := range ctx.Input {
 		ctx.Collector <- kv
 	}
 }
 
 func IdentityReduce(ctx ReduceContext) {
-	defer ctx.Close()
-
 	for j := range ctx.Input {
 		for v := range j.Values {
 			ctx.Collector <- KeyValue{j.Key, v}
@@ -962,8 +972,6 @@ func (m *IdentityReducerTool) Run(args []string) {
 }
 
 func IntegerSumReduce(ctx ReduceContext) {
-	defer ctx.Close()
-
 	for j := range ctx.Input {
 		var count int64
 		for v := range j.Values {
