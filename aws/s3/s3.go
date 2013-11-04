@@ -85,7 +85,7 @@ type Object struct {
 	Key    string
 }
 
-func (o Object) ToUrl() string {
+func (o Object) Url() string {
 	return fmt.Sprintf("https://s3.amazonaws.com/%s/%s", o.Bucket, o.Key)
 }
 
