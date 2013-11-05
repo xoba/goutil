@@ -63,10 +63,11 @@ type PutRequest struct {
 }
 
 type PutObjectRequest struct {
-	Object      Object
-	ContentType string
-	Compress    bool
-	Data        []byte
+	Object          Object
+	ContentEncoding string
+	ContentType     string
+	Compress        bool
+	Data            []byte
 }
 
 type ListRequest struct {

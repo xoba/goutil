@@ -350,9 +350,14 @@ func putObject(auth aws.Auth, req PutObjectRequest) (err error) {
 		return err
 	}
 	hreq.Header.Add("Date", format(now))
-	if req.Compress {
+
+	switch {
+	case req.Compress:
 		hreq.Header.Add("Content-Encoding", "gzip")
+	case len(req.ContentEncoding) > 0:
+		hreq.Header.Add("Content-Encoding", req.ContentEncoding)
 	}
+
 	if len(req.ContentType) == 0 {
 		req.ContentType = mimeType(req.Object.Key)
 	}
