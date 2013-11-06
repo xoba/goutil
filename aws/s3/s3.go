@@ -41,7 +41,7 @@ type Bucket struct {
 }
 
 type HeadResponse struct {
-	Etag          string
+	ETag          string
 	ContentType   string
 	ContentLength int
 	LastModified  time.Time

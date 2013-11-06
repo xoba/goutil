@@ -125,7 +125,7 @@ func head(auth aws.Auth, req Object) (*HeadResponse, error) {
 	}
 
 	hr := &HeadResponse{
-		Etag:          etag,
+		ETag:          etag,
 		ContentType:   resp.Header.Get("Content-Type"),
 		ContentLength: int(cl),
 		LastModified:  t,
