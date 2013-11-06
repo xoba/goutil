@@ -5,6 +5,7 @@ package goutil
 import (
 	"bufio"
 	"code.google.com/p/go-uuid/uuid"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -27,6 +28,21 @@ func init() {
 			blackHole = append(blackHole, i)
 		}
 	}()
+}
+
+func GrabAppLock(path string) (locked bool, appId string) {
+	locked = ExclusiveLock(path, 3*time.Second, AppIdLocker(func(id string, f *os.File) {
+		m := make(map[string]string)
+		m["path"] = path
+		m["id"] = id
+		if buf, err := json.Marshal(m); err == nil {
+			appId = string(buf)
+		} else {
+			appId = id
+		}
+		GCBlackHole() <- f
+	}))
+	return
 }
 
 // maintains a persistent uuid
