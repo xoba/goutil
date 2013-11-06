@@ -55,19 +55,22 @@ type CopyRequest struct {
 	From, To Object
 }
 
-type PutRequest struct {
+type BasePut struct {
 	Object          Object
-	ContentEncoding string
 	ContentType     string
-	ReaderFact      goutil.ReaderFactory
+	ContentEncoding string
+	ContentMD5      string
+}
+
+type PutRequest struct {
+	BasePut
+	ReaderFact goutil.ReaderFactory
 }
 
 type PutObjectRequest struct {
-	Object          Object
-	ContentEncoding string
-	ContentType     string
-	Compress        bool
-	Data            []byte
+	BasePut
+	Compress bool
+	Data     []byte
 }
 
 type ListRequest struct {
@@ -87,7 +90,7 @@ type Object struct {
 }
 
 func (o Object) Url() string {
-	return fmt.Sprintf("https://s3.amazonaws.com/%s/%s", o.Bucket, o.Key)
+	return fmt.Sprintf("https://s3.amazonaws.com/%s/%s", esc(o.Bucket), esc(o.Key))
 }
 
 type ListBucketResultContents struct {
@@ -211,7 +214,7 @@ func (s SmartS3) Put(req PutRequest) error {
 		return err
 	}
 	f := func() (interface{}, error) {
-		return nil, put(s.Auth, req)
+		return nil, SimplePut(s.Auth, req)
 	}
 	_, err = s.retry(str(req), f)
 	return err

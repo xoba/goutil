@@ -80,8 +80,9 @@ func list(auth aws.Auth, req ListRequest) (out ListBucketResult, err error) {
 }
 
 func createURL(o Object) (*url.URL, error) {
-	return url.Parse("https://s3.amazonaws.com/" + esc(o.Bucket) + "/" + esc(o.Key))
+	return url.Parse(o.Url())
 }
+
 func createURL2() (*url.URL, error) {
 	return url.Parse("https://s3.amazonaws.com/")
 }
@@ -277,7 +278,7 @@ func signPut(path string, ct string, a aws.Auth, t time.Time) (string, error) {
 	return sign(a, "PUT"+N+N+ct+N+format(t)+N+path)
 }
 
-func put(auth aws.Auth, req PutRequest) (err error) {
+func SimplePut(auth aws.Auth, req PutRequest) (err error) {
 	u, err := createURL(req.Object)
 	if err != nil {
 		return err
@@ -305,6 +306,9 @@ func put(auth aws.Auth, req PutRequest) (err error) {
 	hreq.Header.Add("Content-Type", req.ContentType)
 	if len(req.ContentEncoding) > 0 {
 		hreq.Header.Add("Content-Encoding", req.ContentEncoding)
+	}
+	if len(req.ContentMD5) > 0 {
+		hreq.Header.Add("ContentMD5", req.ContentMD5)
 	}
 	hreq.Header.Add("Content-Length", string(req.ReaderFact.Len()))
 	hreq.Header.Add("Authorization", "AWS "+auth.AccessKey+":"+sig)

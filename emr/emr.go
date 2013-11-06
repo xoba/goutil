@@ -318,9 +318,9 @@ func Run(flow Flow) {
 		mapperObject := s3.Object{Bucket: flow.ScriptBucket, Key: "mapper/" + id}
 		reducerObject := s3.Object{Bucket: flow.ScriptBucket, Key: "reducer/" + id}
 
-		check(ss3.PutObject(s3.PutObjectRequest{Object: mapperObject, ContentType: "application/octet-stream", Data: []byte(createScript(step.Mapper, step.ToolChecker, fmt.Sprintf("-indirect=%v", step.IndirectMapJob)))}))
+		check(ss3.PutObject(s3.PutObjectRequest{BasePut: s3.BasePut{Object: mapperObject, ContentType: "application/octet-stream"}, Data: []byte(createScript(step.Mapper, step.ToolChecker, fmt.Sprintf("-indirect=%v", step.IndirectMapJob)))}))
 
-		check(ss3.PutObject(s3.PutObjectRequest{Object: reducerObject, ContentType: "application/octet-stream", Data: []byte(createScript(step.Reducer, step.ToolChecker))}))
+		check(ss3.PutObject(s3.PutObjectRequest{BasePut: s3.BasePut{Object: reducerObject, ContentType: "application/octet-stream"}, Data: []byte(createScript(step.Reducer, step.ToolChecker))}))
 
 		{
 			v.Set(fmt.Sprintf("Steps.member.%d.Name", n), step.Name)
