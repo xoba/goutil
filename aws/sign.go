@@ -2,7 +2,7 @@
 
 see http://docs.amazonwebservices.com/general/latest/gr/signature-version-4.html
 */
-package aws4
+package aws
 
 /*
 

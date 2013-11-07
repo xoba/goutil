@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"github.com/xoba/goutil"
 	"github.com/xoba/goutil/aws"
-	"github.com/xoba/goutil/aws4"
 	"net/http"
 	"strconv"
 	"time"
@@ -149,7 +148,7 @@ func (d DynamoDB) updateItem(key, attr string, v Value) error {
 
 	keys := d.keys()
 
-	svc := aws4.Service{Name: "dynamodb", Region: "us-east-1"}
+	svc := aws.Service{Name: "dynamodb", Region: "us-east-1"}
 
 	err = svc.Sign(&keys, req)
 
@@ -201,7 +200,7 @@ func (d DynamoDB) incItem(key, attr string, v float64) error {
 
 	keys := d.keys()
 
-	svc := aws4.Service{Name: "dynamodb", Region: "us-east-1"}
+	svc := aws.Service{Name: "dynamodb", Region: "us-east-1"}
 
 	err = svc.Sign(&keys, req)
 
@@ -262,7 +261,7 @@ func (d DynamoDB) putItem(item map[string]Value) error {
 
 	keys := d.keys()
 
-	svc := aws4.Service{Name: "dynamodb", Region: "us-east-1"}
+	svc := aws.Service{Name: "dynamodb", Region: "us-east-1"}
 
 	err = svc.Sign(&keys, req)
 
@@ -310,7 +309,7 @@ func (d DynamoDB) deleteItem(mykey string) error {
 
 	keys := d.keys()
 
-	svc := aws4.Service{Name: "dynamodb", Region: "us-east-1"}
+	svc := aws.Service{Name: "dynamodb", Region: "us-east-1"}
 
 	err = svc.Sign(&keys, req)
 
@@ -382,7 +381,7 @@ func (d DynamoDB) getItem(mykey string) (out map[string]Value, hasItem bool, err
 
 	keys := d.keys()
 
-	svc := aws4.Service{Name: "dynamodb", Region: "us-east-1"}
+	svc := aws.Service{Name: "dynamodb", Region: "us-east-1"}
 
 	err = svc.Sign(&keys, req)
 
@@ -473,6 +472,6 @@ func (s DynamoDB) retry(msg string, f func() (interface{}, error)) (v interface{
 	return goutil.Retry(msg, s.Strat.NewInstance(), f)
 }
 
-func (d DynamoDB) keys() aws4.Keys {
-	return aws4.Keys{AccessKey: d.Auth.AccessKey, SecretKey: d.Auth.SecretKey}
+func (d DynamoDB) keys() aws.Keys {
+	return aws.Keys{AccessKey: d.Auth.AccessKey, SecretKey: d.Auth.SecretKey}
 }

@@ -890,7 +890,7 @@ func (m *ReduceTool) Description() string {
 	return m.description
 }
 
-const TICKER = 60 * time.Second
+const TICKER = 300 * time.Second
 
 func (m *ReduceTool) Run(args []string) {
 	go runTicker("reduce", TICKER)
