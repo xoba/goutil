@@ -324,14 +324,11 @@ func SimplePut(auth aws.Auth, req PutRequest) (err error) {
 	if len(req.ContentEncoding) > 0 {
 		hreq.Header.Add("Content-Encoding", req.ContentEncoding)
 	}
-
 	if len(md5) > 0 {
 		hreq.Header.Add("Content-MD5", md5)
 	}
-
 	hreq.Header.Add("Content-Length", fmt.Sprintf("%d", req.ReaderFact.Len()))
 	hreq.Header.Add("Authorization", "AWS "+auth.AccessKey+":"+sig)
-	fmt.Println(hreq.Header)
 	resp, err := transport.RoundTrip(hreq)
 	if err != nil {
 		return err
