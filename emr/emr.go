@@ -38,6 +38,11 @@ type MapContext struct {
 	Input <-chan KeyValue
 	Output
 	Context
+	Error
+}
+
+type Error struct {
+	Error error
 }
 
 type ReduceContext struct {

@@ -17,7 +17,40 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 )
+
+type MonFlow struct {
+	Auth map[string]aws.Auth
+}
+
+func NewMonFlow(a aws.Auth) *MonFlow {
+	m := make(map[string]aws.Auth)
+	m["default"] = a
+	return &MonFlow{m}
+}
+
+func (m *MonFlow) Name() string {
+	return "monflow,monitor an emr job flow"
+}
+
+func (m *MonFlow) Run(args []string) {
+	flow, a := getFlowAndAuth(args, m.Auth)
+	for {
+		r := FetchFlow(a, flow)
+		switch r.State {
+		case "STARTING":
+			fmt.Println("starting")
+		case "RUNNING":
+			fmt.Println("running")
+		case "COMPLETED":
+			fmt.Println("completed")
+		default:
+			fmt.Printf("default: %s\n", r.State)
+		}
+		time.Sleep(10 * time.Second)
+	}
+}
 
 // should have a "default" key
 type ShowFlow struct {
@@ -37,26 +70,31 @@ func (m *ShowFlow) Description() string {
 	return "debug an emr job flow"
 }
 
-func (m *ShowFlow) Run(args []string) {
-
+func getFlowAndAuth(args []string, m map[string]aws.Auth) (string, aws.Auth) {
 	var flow, auth string
-	flags := flag.NewFlagSet(m.Name(), flag.ExitOnError)
+	flags := flag.NewFlagSet("flow", flag.ExitOnError)
 	flags.StringVar(&flow, "id", "", "the job flow to debug")
 	flags.StringVar(&auth, "auth", "default", "the authorization to choose")
 	flags.Parse(args)
 
 	a := func() aws.Auth {
 		switch {
-		case len(m.Auth) == 0:
+		case len(m) == 0:
 			panic("no authorizations")
-		case len(m.Auth) == 1:
-			for _, v := range m.Auth {
+		case len(m) == 1:
+			for _, v := range m {
 				return v
 			}
 		}
-		return m.Auth[auth]
+		return m[auth]
 	}()
 
+	return flow, a
+}
+
+func (m *ShowFlow) Run(args []string) {
+
+	flow, a := getFlowAndAuth(args, m.Auth)
 	r := FetchFlow(a, flow)
 
 	if buf, err := json.MarshalIndent(r, "", "  "); err == nil {

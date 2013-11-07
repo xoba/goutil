@@ -2,10 +2,10 @@ package s3
 
 import (
 	"bytes"
-	"compress/gzip"
 	"crypto/hmac"
 	"crypto/sha1"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -274,8 +274,8 @@ func signCopy(path string, a aws.Auth, t time.Time, from Object) (string, error)
 	return sign(a, "PUT"+N+N+N+format(t)+N+xx+N+path)
 }
 
-func signPut(path string, ct string, a aws.Auth, t time.Time) (string, error) {
-	return sign(a, "PUT"+N+N+ct+N+format(t)+N+path)
+func signPut(path string, md5, ct string, a aws.Auth, t time.Time) (string, error) {
+	return sign(a, "PUT"+N+md5+N+ct+N+format(t)+N+path)
 }
 
 func SimplePut(auth aws.Auth, req PutRequest) (err error) {
@@ -298,7 +298,24 @@ func SimplePut(auth aws.Auth, req PutRequest) (err error) {
 	if len(req.ContentType) == 0 {
 		req.ContentType = mimeType(req.Object.Key)
 	}
-	sig, err := signPut(u.Path, req.ContentType, auth, now)
+
+	md5, err := func() (string, error) {
+		if len(req.ContentMD5) == 32 {
+			d, err := hex.DecodeString(req.ContentMD5)
+			if err != nil {
+				return "", err
+			}
+			return base64.StdEncoding.EncodeToString(d), nil
+		} else {
+			return req.ContentMD5, nil
+		}
+	}()
+
+	if err != nil {
+		return err
+	}
+
+	sig, err := signPut(u.Path, md5, req.ContentType, auth, now)
 	if err != nil {
 		return
 	}
@@ -307,72 +324,14 @@ func SimplePut(auth aws.Auth, req PutRequest) (err error) {
 	if len(req.ContentEncoding) > 0 {
 		hreq.Header.Add("Content-Encoding", req.ContentEncoding)
 	}
-	if len(req.ContentMD5) > 0 {
-		hreq.Header.Add("ContentMD5", req.ContentMD5)
+
+	if len(md5) > 0 {
+		hreq.Header.Add("Content-MD5", md5)
 	}
-	hreq.Header.Add("Content-Length", string(req.ReaderFact.Len()))
+
+	hreq.Header.Add("Content-Length", fmt.Sprintf("%d", req.ReaderFact.Len()))
 	hreq.Header.Add("Authorization", "AWS "+auth.AccessKey+":"+sig)
-	resp, err := transport.RoundTrip(hreq)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return errors.New(resp.Status)
-	}
-	return nil
-}
-
-func compress(b []byte) []byte {
-	var w bytes.Buffer
-	gz := gzip.NewWriter(&w)
-	r := bytes.NewBuffer(b)
-	io.Copy(gz, r)
-	gz.Close()
-	out := w.Bytes()
-	return out
-}
-
-func putObject(auth aws.Auth, req PutObjectRequest) (err error) {
-	u, err := createURL(req.Object)
-	if err != nil {
-		return err
-	}
-	now := time.Now()
-	transport := http.DefaultTransport
-
-	data := req.Data
-
-	if req.Compress {
-		data = compress(data)
-	}
-
-	reader := bytes.NewBuffer(data)
-
-	hreq, err := http.NewRequest("PUT", u.String(), reader)
-	if err != nil {
-		return err
-	}
-	hreq.Header.Add("Date", format(now))
-
-	switch {
-	case req.Compress:
-		hreq.Header.Add("Content-Encoding", "gzip")
-	case len(req.ContentEncoding) > 0:
-		hreq.Header.Add("Content-Encoding", req.ContentEncoding)
-	}
-
-	if len(req.ContentType) == 0 {
-		req.ContentType = mimeType(req.Object.Key)
-	}
-	sig, err := signPut(u.Path, req.ContentType, auth, now)
-	if err != nil {
-		return
-	}
-	hreq.ContentLength = int64(len(data))
-	hreq.Header.Add("Content-Type", req.ContentType)
-	hreq.Header.Add("Content-Length", string(len(data)))
-	hreq.Header.Add("Authorization", "AWS "+auth.AccessKey+":"+sig)
+	fmt.Println(hreq.Header)
 	resp, err := transport.RoundTrip(hreq)
 	if err != nil {
 		return err

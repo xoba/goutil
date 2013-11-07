@@ -23,7 +23,7 @@ type Interface interface {
 }
 
 func GetDefault(a aws.Auth) Interface {
-	return SmartS3{Auth: a, Strat: &goutil.RetryBackoffStrat{BackoffFactor: 1.5, Delay: time.Second, Retries: 5}}
+	return SmartS3{Auth: a, Strat: &goutil.RetryBackoffStrat{BackoffFactor: 1.5, Delay: time.Second, Retries: 3}}
 }
 
 type ListAllMyBucketsResult struct {
@@ -59,7 +59,7 @@ type BasePut struct {
 	Object          Object
 	ContentType     string
 	ContentEncoding string
-	ContentMD5      string
+	ContentMD5      string // md5, hex or base64
 }
 
 type PutRequest struct {
@@ -69,8 +69,7 @@ type PutRequest struct {
 
 type PutObjectRequest struct {
 	BasePut
-	Compress bool
-	Data     []byte
+	Data []byte
 }
 
 type ListRequest struct {
@@ -221,15 +220,10 @@ func (s SmartS3) Put(req PutRequest) error {
 }
 
 func (s SmartS3) PutObject(req PutObjectRequest) error {
-	err := checkObject(req.Object)
-	if err != nil {
-		return err
-	}
-	f := func() (interface{}, error) {
-		return nil, putObject(s.Auth, req)
-	}
-	_, err = s.retry(str(req), f)
-	return err
+	return s.Put(PutRequest{
+		BasePut:    req.BasePut,
+		ReaderFact: goutil.BufferReaderFact{req.Data},
+	})
 }
 
 func (s SmartS3) Delete(req DeleteRequest) error {

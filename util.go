@@ -8,6 +8,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"os"
 	"runtime"
 	"strings"
 	"time"
@@ -106,7 +107,7 @@ func Retry(msg string, bs RetryStrategyInstance, f func() (interface{}, error)) 
 
 type ReaderFactory interface {
 	CreateReader() (io.ReadCloser, error)
-	Len() uint64
+	Len() int
 }
 
 type BufferReaderFact struct {
@@ -124,13 +125,38 @@ func (b BufferReader) Read(p []byte) (n int, err error) {
 	return b.Buffer.Read(p)
 }
 
-func (b BufferReaderFact) Len() uint64 {
-	return uint64(len(b.Buffer))
+func (b BufferReaderFact) Len() int {
+	return len(b.Buffer)
 }
 
 func (b BufferReaderFact) CreateReader() (io.ReadCloser, error) {
 	buf := bytes.NewBuffer(b.Buffer)
 	return BufferReader{buf}, nil
+}
+
+func NewFileReaderFact(path string) (*FileReaderFact, error) {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	return &FileReaderFact{Path: path, Length: int(fi.Size())}, nil
+}
+
+type FileReaderFact struct {
+	Path   string
+	Length int
+}
+
+func (rf FileReaderFact) Len() int {
+	return rf.Length
+}
+
+func (rf FileReaderFact) CreateReader() (io.ReadCloser, error) {
+	f, err := os.Open(rf.Path)
+	if err != nil {
+		return nil, err
+	}
+	return f, nil
 }
 
 type Authorizer func(r *http.Request) bool
