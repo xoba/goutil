@@ -43,6 +43,8 @@ func (m *MonFlow) Run(args []string) {
 			fmt.Println("starting")
 		case "RUNNING":
 			fmt.Println("running")
+		case "SHUTTING_DOWN":
+			fmt.Println("shutting down")
 		case "COMPLETED":
 			fmt.Println("completed")
 		default:
