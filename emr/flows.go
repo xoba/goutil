@@ -219,7 +219,7 @@ func LoadLines2(ss3 s3.Interface, output *StepLocation, threads int, fileDecider
 			for o := range ch {
 				fn := o.Bucket + "/" + o.Key
 				if fileDecider(fn) {
-					r, err := ss3.Get(s3.GetRequest{o})
+					r, err := ss3.Get(s3.GetRequest{Object: o})
 					check(err)
 					defer r.Close()
 					if strings.HasSuffix(o.Key, ".gz") {

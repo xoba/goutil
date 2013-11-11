@@ -182,14 +182,20 @@ func get(auth aws.Auth, req GetRequest) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	transport := http.DefaultTransport
+	rt := func() http.RoundTripper {
+		if req.RoundTripper == nil {
+			return http.DefaultTransport
+		} else {
+			return req.RoundTripper
+		}
+	}()
 	hreq, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
 		return nil, err
 	}
 	hreq.Header.Add("Date", format(now))
 	hreq.Header.Add("Authorization", "AWS "+auth.AccessKey+":"+sig)
-	resp, err := transport.RoundTrip(hreq)
+	resp, err := rt.RoundTrip(hreq)
 	if err != nil {
 		return nil, err
 	}

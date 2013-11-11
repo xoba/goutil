@@ -7,6 +7,7 @@ import (
 	"github.com/xoba/goutil"
 	"github.com/xoba/goutil/aws"
 	"io"
+	"net/http"
 	"time"
 )
 
@@ -48,7 +49,8 @@ type HeadResponse struct {
 }
 
 type GetRequest struct {
-	Object Object
+	Object       Object
+	RoundTripper http.RoundTripper
 }
 
 type CopyRequest struct {
