@@ -18,13 +18,13 @@ import (
 )
 
 type Build struct {
-	Version string
-	Commit  string // the commit id
-	Url     string
-	BuildId string
-	Status  string
-	Clean   bool // whether or not we're completely sync'd with version control
-	Built   time.Time
+	Version string    `json:",omitempty"`
+	Commit  string    `json:",omitempty"` // i.e., the git commit
+	Url     string    `json:",omitempty"`
+	BuildId string    `json:",omitempty"`
+	Status  string    `json:",omitempty"`
+	Clean   bool      `json:",omitempty"` // whether or not we're completely sync'd with version control
+	Built   time.Time `json:",omitempty"`
 }
 
 const (
