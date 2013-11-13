@@ -91,7 +91,7 @@ type Object struct {
 }
 
 func (o Object) Url() string {
-	return fmt.Sprintf("https://s3.amazonaws.com/%s/%s", esc(o.Bucket), esc(o.Key))
+	return fmt.Sprintf("https://s3.amazonaws.com/%s/%s", o.Bucket, o.Key)
 }
 
 type ListBucketResultContents struct {
