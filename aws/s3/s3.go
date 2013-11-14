@@ -95,14 +95,9 @@ func (o Object) Url() string {
 }
 
 type ListBucketResultContents struct {
-	Key, ETag, StorageClass string
+	Key, ETag, StorageClass string `json:",omitempty"`
 	Size                    int
-	Owner                   ListBucketResultOwner
-	LastModified            time.Time
-}
-
-type ListBucketResultOwner struct {
-	ID, DisplayName string
+	LastModified            time.Time `json:",omitempty"`
 }
 
 type ListBucketResult struct {
