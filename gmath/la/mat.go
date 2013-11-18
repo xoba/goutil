@@ -45,6 +45,9 @@ type Matrix struct {
 func NewMatrix(m, n int) *Matrix {
 	return &Matrix{Rows: m, Cols: n, ColumnStride: m, Elements: make([]float64, m*n)}
 }
+func NewMatrixWithElements(m, n int, elements []float64) *Matrix {
+	return &Matrix{Rows: m, Cols: n, ColumnStride: m, Elements: elements}
+}
 
 func (m *Matrix) index(i, j int) int {
 	return j*m.ColumnStride + i
