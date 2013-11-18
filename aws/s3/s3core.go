@@ -172,6 +172,21 @@ func buckets(auth aws.Auth) (*ListAllMyBucketsResult, error) {
 	return &out, nil
 }
 
+func PreSignedUrl(auth aws.Auth, o Object, expiration time.Duration) (string, error) {
+	u, err := createURL(o)
+	if err != nil {
+		return "", err
+	}
+	now := time.Now()
+	t := time.Now().UTC().Add(expiration)
+	sig, err := signGetExp(u.Path, auth, now, t)
+	return fmt.Sprintf("%s?AWSAccessKeyId=%s&Expires=%d&Signature=%s", o.Url(), url.QueryEscape(auth.AccessKey), t.Unix(), url.QueryEscape(sig)), nil
+}
+
+func signGetExp(path string, a aws.Auth, t time.Time, expiration time.Time) (string, error) {
+	return sign(a, "GET"+N+N+N+fmt.Sprintf("%d", expiration.Unix())+N+path)
+}
+
 func get(auth aws.Auth, req GetRequest) (io.ReadCloser, error) {
 	u, err := createURL(req.Object)
 	if err != nil {

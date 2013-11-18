@@ -91,18 +91,13 @@ type Object struct {
 }
 
 func (o Object) Url() string {
-	return fmt.Sprintf("https://s3.amazonaws.com/%s/%s", esc(o.Bucket), esc(o.Key))
+	return fmt.Sprintf("https://s3.amazonaws.com/%s/%s", o.Bucket, o.Key)
 }
 
 type ListBucketResultContents struct {
-	Key, ETag, StorageClass string
+	Key, ETag, StorageClass string `json:",omitempty"`
 	Size                    int
-	Owner                   ListBucketResultOwner
-	LastModified            time.Time
-}
-
-type ListBucketResultOwner struct {
-	ID, DisplayName string
+	LastModified            time.Time `json:",omitempty"`
 }
 
 type ListBucketResult struct {
