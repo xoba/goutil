@@ -631,11 +631,6 @@ func createScript(t tool.Interface, checker ToolChecker, args ...string) string 
 		return string(f.Bytes())
 	}()
 
-	if false {
-		fmt.Println(run)
-		os.Exit(0)
-	}
-
 	w(run)
 
 	w("/bin/rm $CMD")

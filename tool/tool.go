@@ -226,7 +226,7 @@ func Run(b Build) {
 			name := os.Args[1]
 			t, ok := tools[name]
 			if !ok {
-				fmt.Printf("no such tool: %s\n", name)
+				fmt.Fprintf(os.Stderr, "no such tool: %s\n", name)
 				os.Exit(1)
 			}
 
