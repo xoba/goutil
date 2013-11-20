@@ -274,3 +274,7 @@ func (s *HttpAuthMux) Handle(pattern string, handler http.Handler) {
 func (s *HttpAuthMux) HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) {
 	s.mux.HandleFunc(pattern, handler)
 }
+
+func InTimeRange(t, startInclusive, endExclusive time.Time) bool {
+	return t.Equal(startInclusive) || (t.After(startInclusive) && t.Before(endExclusive))
+}
