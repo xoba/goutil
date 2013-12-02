@@ -2,174 +2,179 @@
 logging for the purposes of analysis later on.
 
 */
-package logging
+package log
 
 import (
 	"code.google.com/p/go-uuid/uuid"
-	"container/list"
 	"encoding/json"
 	"fmt"
+	"github.com/xoba/goutil"
+	"github.com/xoba/goutil/aws"
 	"github.com/xoba/goutil/aws/s3"
-	golog "log"
-	"reflect"
+	"os"
 	"time"
 )
 
-const (
-	CAPACITY       = 1000
-	PERIOD         = 60 * time.Second
-	ISO8601_FORMAT = "20060102T150405Z"
-)
-
-type Log interface {
-	Add(interface{})
-	Flush()
+type Logger interface {
+	Add(interface{}) error
 }
 
-type ControlMessage struct {
-	Name   string
-	Notify chan error
+type test struct {
+	a aws.Auth
 }
 
-type _Log struct {
-	list     *list.List
-	control  chan ControlMessage
-	newItems chan Message
+func NewTest(a aws.Auth) *test {
+	return &test{a}
+}
+
+func (*test) Name() string {
+	return "log.test,test logging code"
+}
+
+func (t *test) Run(args []string) {
+	ss3 := s3.GetDefault(t.a)
+	logger := NewJSONLogger("myrun", ss3, "fyilife", "/tmp")
+	i := 0
+	for {
+		i++
+		fmt.Printf("running #%d\n", i)
+		logger.Add(fmt.Sprintf("this is a test #%d", i))
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+type logger struct {
 	run      string
 	ss3      s3.Interface
 	bucket   string
-}
-
-func NewLogger(runID string, ss3 s3.Interface, bucket string) Log {
-	log := _Log{bucket: bucket, ss3: ss3, run: runID, list: list.New(), control: make(chan ControlMessage, CAPACITY), newItems: make(chan Message, CAPACITY)}
-	log.poll()
-	return log
-}
-
-func (log _Log) Add(x interface{}) {
-	t := reflect.TypeOf(x)
-	msg := Message{Time: time.Now().UTC(), Pkg: t.PkgPath(), Type: t.Name(), Value: x}
-	log.newItems <- msg
-}
-
-func (log _Log) Flush() {
-	golog.Println("flushing log...")
-	cm := ControlMessage{Name: "poll", Notify: make(chan error)}
-	log.control <- cm
-	res := <-cm.Notify
-	close(cm.Notify)
-	if res != nil {
-		golog.Printf("flushed log error: %s", res)
-	}
-}
-
-type LogRecord struct {
-	Run     string
-	Time    time.Time
-	Payload []Message
+	dir      string
+	messages chan Message
 }
 
 type Message struct {
-	Time  time.Time
-	Pkg   string
-	Type  string
-	Value interface{}
+	Time    time.Time
+	Id      string
+	Payload interface{}
 }
 
-func formatISOTime(t time.Time) string {
-	return t.UTC().Format(ISO8601_FORMAT)
+func NewJSONLogger(runID string, ss3 s3.Interface, bucket string, dir string) Logger {
+	log := logger{
+		bucket:   bucket,
+		ss3:      ss3,
+		run:      runID,
+		dir:      dir,
+		messages: make(chan Message, 100),
+	}
+	go log.poll()
+	return &log
 }
 
-func saveJSON(ss3 s3.Interface, bucket string, o interface{}, key string) error {
+/*
 
-	golog.Printf("saving json to http://%s.s3.amazonaws.com/%s", bucket, key)
+ periodically writes out to a file, then saves file to s3
 
-	payload, err := json.MarshalIndent(o, "", "  ")
+*/
+func (log *logger) poll() {
 
+	var path string
+	var last time.Time
+	var e *json.Encoder
+	var items []Message
+	var count int
+
+	resetFile := func() func() {
+		var err error
+		var f *os.File
+		return func() {
+			if len(path) > 0 {
+				f.Close()
+				err = os.Remove(path)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "oops... can't remove %s: %v\n", path, err)
+				}
+			}
+			path = log.dir + "/" + uuid.New() + ".json"
+			f, err = os.Create(path)
+			check(err)
+			last = time.Now()
+			e = json.NewEncoder(f)
+			items = make([]Message, 0)
+			count = 0
+		}
+	}()
+
+	resetFile()
+
+	ticker := time.NewTicker(100 * time.Millisecond)
+
+	for {
+
+		select {
+
+		case <-ticker.C:
+
+			if len(items) > 0 {
+				rec := LogRecord{
+					Run:      log.run,
+					Time:     time.Now().UTC(),
+					Id:       uuid.New(),
+					Messages: items,
+				}
+				err := e.Encode(rec)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "oops... error writing log: %v\n", err)
+				}
+				count += len(items)
+				items = make([]Message, 0)
+			}
+
+			if count > 0 && time.Now().Sub(last) > 10*time.Second {
+				log.saveToS3(path)
+				resetFile()
+			}
+
+		case m := <-log.messages:
+			items = append(items, m)
+		}
+	}
+}
+
+func (log *logger) Add(x interface{}) error {
+	log.messages <- Message{
+		Time:    time.Now().UTC(),
+		Id:      uuid.New(),
+		Payload: x,
+	}
+	return nil
+}
+
+type LogRecord struct {
+	Run      string
+	Id       string
+	Time     time.Time
+	Messages []Message
+}
+
+func (log *logger) saveToS3(path string) error {
+	rf, err := goutil.NewFileReaderFact(path)
 	if err != nil {
 		return err
 	}
-
-	req := s3.PutObjectRequest{Object: s3.Object{Bucket: bucket, Key: key}, ContentType: "application/json", Data: payload}
-
-	return ss3.PutObject(req)
-
-}
-
-func copyMessages(x *list.List) []Message {
-	payload := make([]Message, x.Len())
-	i := 0
-	for e := x.Front(); e != nil; e = e.Next() {
-		payload[i] = e.Value.(Message)
-		i++
+	o := s3.Object{
+		Bucket: log.bucket,
+		Key:    fmt.Sprintf("%s_%s_%s.json", uuid.New(), log.run, time.Now().UTC().Format("20060102T150405Z")),
 	}
-	return payload
+	return log.ss3.Put(s3.PutRequest{
+		BasePut: s3.BasePut{
+			Object:      o,
+			ContentType: "application/json",
+		},
+		ReaderFact: rf,
+	})
 }
 
-func coreSave(ss3 s3.Interface, bucket string, log _Log, payload []Message, notify chan error) {
-
-	now := time.Now().UTC()
-	rec := LogRecord{Run: log.run, Time: now, Payload: payload}
-
-	err := saveJSON(ss3, bucket, rec, fmt.Sprintf("%s_%s.json", formatISOTime(now), uuid.New()))
-
-	if notify != nil {
-		notify <- err
+func check(e error) {
+	if e != nil {
+		panic(e)
 	}
-}
-
-func (log _Log) save(c ControlMessage) {
-
-	if log.list.Len() > 0 {
-
-		payload := copyMessages(log.list)
-
-		log.list.Init()
-
-		go coreSave(log.ss3, log.bucket, log, payload, c.Notify)
-
-	}
-}
-
-func (log _Log) checkSave() {
-	if log.list.Len() > CAPACITY/10 {
-		log.control <- ControlMessage{Name: "save"}
-	}
-}
-
-func (log _Log) poll() {
-
-	golog.Printf("logger starting, polling every %s", PERIOD)
-
-	ticker := time.Tick(PERIOD)
-
-	go func() {
-		for _ = range ticker {
-			log.control <- ControlMessage{Name: "poll"}
-		}
-	}()
-
-	go func() {
-
-		for {
-
-			select {
-
-			case c := <-log.control:
-
-				if c.Name == "save" {
-					log.save(c)
-				} else if c.Name == "poll" {
-					log.save(c)
-				}
-
-			case m := <-log.newItems:
-				log.list.PushBack(m)
-
-			}
-
-			log.checkSave()
-		}
-
-	}()
 }
