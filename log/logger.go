@@ -16,15 +16,23 @@ import (
 )
 
 type Logger interface {
-	Add(interface{}) error
+
+	// async logging
+	Add(interface{})
+
+	// returns only when log is committed to permanent storage
+	AddSync(interface{}) error
+
+	Flush()
 }
 
 type test struct {
-	a aws.Auth
+	bucket string
+	a      aws.Auth
 }
 
-func NewTest(a aws.Auth) *test {
-	return &test{a}
+func NewTest(a aws.Auth, bucket string) *test {
+	return &test{bucket, a}
 }
 
 func (*test) Name() string {
@@ -33,7 +41,7 @@ func (*test) Name() string {
 
 func (t *test) Run(args []string) {
 	ss3 := s3.GetDefault(t.a)
-	logger := NewJSONLogger("myrun", ss3, "fyilife", "/tmp")
+	logger := NewJSONLogger("myrun", ss3, t.bucket, "/tmp")
 	i := 0
 	for {
 		i++
@@ -48,7 +56,13 @@ type logger struct {
 	ss3      s3.Interface
 	bucket   string
 	dir      string
-	messages chan Message
+	messages chan Message2
+}
+
+type Message2 struct {
+	Message
+	Type  string
+	Reply chan error
 }
 
 type Message struct {
@@ -63,7 +77,7 @@ func NewJSONLogger(runID string, ss3 s3.Interface, bucket string, dir string) Lo
 		ss3:      ss3,
 		run:      runID,
 		dir:      dir,
-		messages: make(chan Message, 100),
+		messages: make(chan Message2, 100),
 	}
 	go log.poll()
 	return &log
@@ -81,11 +95,18 @@ func (log *logger) poll() {
 	var e *json.Encoder
 	var items []Message
 	var count int
+	var replies []chan error
 
-	resetFile := func() func() {
+	reset := func() func() {
 		var err error
 		var f *os.File
 		return func() {
+			for _, c := range replies {
+				go func(c chan error) {
+					c <- nil
+				}(c)
+			}
+			replies = make([]chan error, 0)
 			if len(path) > 0 {
 				f.Close()
 				err = os.Remove(path)
@@ -103,7 +124,7 @@ func (log *logger) poll() {
 		}
 	}()
 
-	resetFile()
+	reset()
 
 	ticker := time.NewTicker(100 * time.Millisecond)
 
@@ -130,22 +151,64 @@ func (log *logger) poll() {
 
 			if count > 0 && time.Now().Sub(last) > 10*time.Second {
 				log.saveToS3(path)
-				resetFile()
+				reset()
 			}
 
 		case m := <-log.messages:
-			items = append(items, m)
+			fmt.Printf("message: %v\n", m)
+
+			switch m.Type {
+
+			case "flush":
+
+				fmt.Printf("flushing %d...\n", count)
+
+				if count > 0 {
+					log.saveToS3(path)
+					reset()
+				}
+
+			default:
+				items = append(items, m.Message)
+				if m.Reply != nil {
+					replies = append(replies, m.Reply)
+				}
+			}
 		}
+
 	}
 }
 
-func (log *logger) Add(x interface{}) error {
-	log.messages <- Message{
-		Time:    time.Now().UTC(),
-		Id:      uuid.New(),
-		Payload: x,
+func (log *logger) Flush() {
+	log.messages <- Message2{
+		Type: "flush",
 	}
-	return nil
+}
+
+func (log *logger) Add(x interface{}) {
+	fmt.Printf("logging...")
+	log.messages <- Message2{
+		Message: Message{
+			Time:    time.Now().UTC(),
+			Id:      uuid.New(),
+			Payload: x,
+		},
+	}
+	return
+}
+
+func (log *logger) AddSync(x interface{}) error {
+	fmt.Printf("logging sync...")
+	reply := make(chan error)
+	log.messages <- Message2{
+		Message: Message{
+			Time:    time.Now().UTC(),
+			Id:      uuid.New(),
+			Payload: x,
+		},
+		Reply: reply,
+	}
+	return <-reply
 }
 
 type LogRecord struct {
@@ -156,6 +219,7 @@ type LogRecord struct {
 }
 
 func (log *logger) saveToS3(path string) error {
+	fmt.Printf("saving to s3")
 	rf, err := goutil.NewFileReaderFact(path)
 	if err != nil {
 		return err
