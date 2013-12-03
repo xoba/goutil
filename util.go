@@ -278,3 +278,33 @@ func (s *HttpAuthMux) HandleFunc(pattern string, handler func(http.ResponseWrite
 func InTimeRange(t, startInclusive, endExclusive time.Time) bool {
 	return t.Equal(startInclusive) || (t.After(startInclusive) && t.Before(endExclusive))
 }
+
+func NewSingleReaderFact(r io.Reader, length int) ReaderFactory {
+	return &srf{length: length, reader: r}
+}
+
+type srf struct {
+	created bool
+	length  int
+	reader  io.Reader
+}
+
+func (r *srf) CreateReader() (io.ReadCloser, error) {
+	if r.created {
+		return nil, fmt.Errorf("already created")
+	} else {
+		r.created = true
+		return &ReadCloser{r.reader}, nil
+	}
+}
+func (r *srf) Len() int {
+	return r.length
+}
+
+type ReadCloser struct {
+	io.Reader
+}
+
+func (r ReadCloser) Close() error {
+	return nil
+}
