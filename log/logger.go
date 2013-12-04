@@ -155,13 +155,10 @@ func (log *logger) poll() {
 			}
 
 		case m := <-log.messages:
-			fmt.Printf("message: %v\n", m)
 
 			switch m.Type {
 
 			case "flush":
-
-				fmt.Printf("flushing %d...\n", count)
 
 				if count > 0 {
 					log.saveToS3(path)
@@ -186,7 +183,6 @@ func (log *logger) Flush() {
 }
 
 func (log *logger) Add(x interface{}) {
-	fmt.Printf("logging...")
 	log.messages <- Message2{
 		Message: Message{
 			Time:    time.Now().UTC(),
@@ -198,7 +194,6 @@ func (log *logger) Add(x interface{}) {
 }
 
 func (log *logger) AddSync(x interface{}) error {
-	fmt.Printf("logging sync...")
 	reply := make(chan error)
 	log.messages <- Message2{
 		Message: Message{
@@ -219,7 +214,6 @@ type LogRecord struct {
 }
 
 func (log *logger) saveToS3(path string) error {
-	fmt.Printf("saving to s3")
 	rf, err := goutil.NewFileReaderFact(path)
 	if err != nil {
 		return err
