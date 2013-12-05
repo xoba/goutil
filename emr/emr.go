@@ -808,6 +808,14 @@ func (c *counter) Read(p []byte) (int, error) {
 	return n, err
 }
 
+func UrlHasExtension(u, ext string) bool {
+	x, err := url.Parse(u)
+	if err != nil {
+		return false
+	}
+	return strings.HasSuffix(x.Path, ext)
+}
+
 func StreamUrl(u string, attempt, max int, backoff time.Duration) (io.ReadCloser, error) {
 
 	retry := func() (io.ReadCloser, error) {
@@ -830,8 +838,8 @@ func StreamUrl(u string, attempt, max int, backoff time.Duration) (io.ReadCloser
 
 	r := resp.Body
 
-	bz := strings.HasSuffix(u, ".bz2")
-	gz := strings.HasSuffix(u, ".gz")
+	bz := UrlHasExtension(u, ".bz2")
+	gz := UrlHasExtension(u, ".gz")
 
 	switch {
 
