@@ -843,7 +843,7 @@ func streamUrl(u string, attempt, max int, backoff time.Duration) (io.ReadCloser
 
 	r := resp.Body
 
-	bz := UrlHasExtension(u, ".bz2")
+	bz2 := resp.Header.Get("Content-Encoding") == "bzip2" || UrlHasExtension(u, ".bz2")
 	gz := resp.Header.Get("Content-Encoding") == "gzip" || UrlHasExtension(u, ".gz")
 
 	switch {
@@ -855,7 +855,7 @@ func streamUrl(u string, attempt, max int, backoff time.Duration) (io.ReadCloser
 		}
 		return r0, nil
 
-	case bz:
+	case bz2:
 		return &readCloser{bzip2.NewReader(r)}, nil
 	}
 
