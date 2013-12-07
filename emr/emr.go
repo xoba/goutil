@@ -766,7 +766,7 @@ func (m *MapTool) Run(args []string) {
 				count("indirect", "files.started", 1)
 				defer count("indirect", "files.ended", 1)
 
-				r, err := StreamUrl(u, 0, 5, 1*time.Second)
+				r, err := StreamUrl(u, 5, 1*time.Second)
 
 				if err == nil {
 					defer r.Close()
@@ -816,12 +816,16 @@ func UrlHasExtension(u, ext string) bool {
 	return strings.HasSuffix(x.Path, ext)
 }
 
-func StreamUrl(u string, attempt, max int, backoff time.Duration) (io.ReadCloser, error) {
+func StreamUrl(u string, max int, backoff time.Duration) (io.ReadCloser, error) {
+	return streamUrl(u, 0, max, backoff)
+}
+
+func streamUrl(u string, attempt, max int, backoff time.Duration) (io.ReadCloser, error) {
 
 	retry := func() (io.ReadCloser, error) {
 		if attempt < max {
 			time.Sleep(backoff)
-			return StreamUrl(u, attempt+1, max, 2*backoff)
+			return streamUrl(u, attempt+1, max, 2*backoff)
 		} else {
 			return nil, fmt.Errorf("max attempts failed for %s", u)
 		}
@@ -830,6 +834,7 @@ func StreamUrl(u string, attempt, max int, backoff time.Duration) (io.ReadCloser
 	tr := &http.Transport{
 		DisableCompression: true,
 	}
+
 	client := &http.Client{Transport: tr}
 	resp, err := client.Get(u)
 	if err != nil {
@@ -839,7 +844,7 @@ func StreamUrl(u string, attempt, max int, backoff time.Duration) (io.ReadCloser
 	r := resp.Body
 
 	bz := UrlHasExtension(u, ".bz2")
-	gz := UrlHasExtension(u, ".gz")
+	gz := resp.Header.Get("Content-Encoding") == "gzip" || UrlHasExtension(u, ".gz")
 
 	switch {
 
