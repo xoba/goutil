@@ -2,11 +2,11 @@
 package forever
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 )
@@ -110,9 +110,9 @@ func (Test) Run(args []string) {
 }
 
 func quote(a []string) string {
-	b := new(bytes.Buffer)
+	var out []string
 	for _, s := range a {
-		fmt.Fprintf(b, "%q", s)
+		out = append(out, fmt.Sprint("%q", s))
 	}
-	return string(b.Bytes())
+	return strings.Join(out, " ")
 }
