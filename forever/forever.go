@@ -112,7 +112,7 @@ func (Test) Run(args []string) {
 func quote(a []string) string {
 	var out []string
 	for _, s := range a {
-		out = append(out, fmt.Sprint("%q", s))
+		out = append(out, fmt.Sprintf("%q", s))
 	}
 	return strings.Join(out, " ")
 }
