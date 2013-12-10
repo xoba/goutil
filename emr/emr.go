@@ -1007,6 +1007,19 @@ func IntegerSumReduce(ctx ReduceContext) {
 	}
 }
 
+func FloatSumReduce(ctx ReduceContext) {
+	for j := range ctx.Input {
+		var total float64
+		for v := range j.Values {
+			i, err := strconv.ParseFloat(v, 64)
+			if err == nil {
+				total += i
+			}
+		}
+		ctx.Collector <- KeyValue{Key: j.Key, Value: fmt.Sprintf("%.10f", total)}
+	}
+}
+
 type Slurper struct {
 }
 
