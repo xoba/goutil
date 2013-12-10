@@ -428,11 +428,21 @@ func runCounters(wg *sync.WaitGroup, counters chan Count) {
 	}
 }
 
-func count(a, b string, amount int) {
-	r := func(s string) string {
-		return strings.Replace(s, ",", "_", -1)
+func AlphaNumFilter(s string) string {
+	out := new(bytes.Buffer)
+	for _, x := range s {
+		if (x >= '0' && x <= '9') || (x >= 'A' && x <= 'Z') || (x >= 'a' && x <= 'z') {
+			out.WriteRune(x)
+		} else {
+			out.WriteRune('_')
+		}
 	}
-	fmt.Fprintf(os.Stderr, "reporter:counter:%s,%s,%d\n", r(a), r(b), amount)
+	s = strings.Replace(s, "\n", "_", -1)
+	return string(out.Bytes())
+}
+
+func count(a, b string, amount int) {
+	fmt.Fprintf(os.Stderr, "reporter:counter:%s,%s,%d\n", AlphaNumFilter(a), AlphaNumFilter(b), amount)
 }
 
 func isNull(x string, s string) {
