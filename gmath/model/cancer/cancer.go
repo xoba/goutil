@@ -131,7 +131,7 @@ func newMon(maxV float64, rp *model.RegressionProblem) *mon {
 	return out
 }
 
-func (x *mon) Continue(v float64, jstar int, m []float64, i, o float64) bool {
+func (x *mon) Continue(v float64, jstar int, m []float64, i, o float64, cn []model.Normalization, rn model.Normalization) bool {
 	fmt.Fprintf(x.f, "%f\t%d\t%f", v, jstar, x.oos.Eval(v))
 	for _, y := range m {
 		fmt.Fprintf(x.f, "\t%f", y)

@@ -68,7 +68,7 @@ type FixedRoundsMonitor struct {
 	Debug PassiveMonitor
 }
 
-func (m *FixedRoundsMonitor) Continue(v float64, jstar int, a []float64, i, o float64) bool {
+func (m *FixedRoundsMonitor) Continue(v float64, jstar int, a []float64, i, o float64, cn []Normalization, rn Normalization) bool {
 	if m.Debug != nil {
 		m.Debug(v, jstar, a, i, o)
 	}
@@ -80,9 +80,9 @@ type IntersectionMonitor struct {
 	B PassiveMonitor
 }
 
-func (m *IntersectionMonitor) Continue(v float64, jstar int, a []float64, i, o float64) bool {
+func (m *IntersectionMonitor) Continue(v float64, jstar int, a []float64, i, o float64, cn []Normalization, rn Normalization) bool {
 	m.B(v, jstar, a, i, o)
-	return m.A(v, jstar, a, i, o)
+	return m.A(v, jstar, a, i, o, cn, rn)
 }
 
 func RunGps(rp *RegressionProblem, testSet *ObservationAssignments, dv float64, mon Continue) *GpsResults {
@@ -155,7 +155,7 @@ func RunGpsFull(rp *RegressionProblem, tt *ObservationAssignments, dv float64, r
 
 		testRisk := rc.CalcRisk(a, testMask, rp, ValueOnly).Value
 
-		if !proceed(v, jstar, a, risk.Value, testRisk) {
+		if !proceed(v, jstar, a, risk.Value, testRisk, cn, rn) {
 			break
 		}
 	}
@@ -204,7 +204,7 @@ type SignalDimInfo struct {
 }
 type Normalization struct {
 	Mean, Sd float64
-	IsNone   bool
+	IsNone   bool `json:",omitempty"`
 }
 
 func (r *RegressionProblem) Copy() *RegressionProblem {
@@ -223,11 +223,11 @@ type ValueAndDerivative struct {
 }
 
 func NormalizeColumnsInPlace(m *la.Matrix, rowMask []float64) (out []Normalization) {
-	for i := 0; i < m.Cols; i++ {
+	for j := 0; j < m.Cols; j++ {
 		var list []float64
-		for j := 0; j < m.Rows; j++ {
-			if rowMask[j] == 1.0 {
-				list = append(list, m.Get(j, i))
+		for i := 0; i < m.Rows; i++ {
+			if rowMask[i] == 1.0 {
+				list = append(list, m.Get(i, j))
 			}
 		}
 		norm := func() Normalization {
@@ -238,11 +238,11 @@ func NormalizeColumnsInPlace(m *la.Matrix, rowMask []float64) (out []Normalizati
 			}
 		}()
 		out = append(out, norm)
-		for j := 0; j < m.Rows; j++ {
-			v := m.Get(j, i)
+		for i := 0; i < m.Rows; i++ {
+			v := m.Get(i, j)
 			v = (v - norm.Mean) / norm.Sd
 			if !(math.IsNaN(v) || math.IsInf(v, 0)) {
-				m.Set(j, i, v)
+				m.Set(i, j, v)
 			}
 		}
 	}
@@ -344,7 +344,7 @@ type FixedVMonitor struct {
 	Max float64
 }
 
-func (x *FixedVMonitor) Continue(v float64, jstar int, m []float64, i, o float64) bool {
+func (x *FixedVMonitor) Continue(v float64, jstar int, m []float64, i, o float64, cn []Normalization, rn Normalization) bool {
 	return v < x.Max
 }
 

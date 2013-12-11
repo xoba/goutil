@@ -50,7 +50,7 @@ type ObservationAssigner interface {
 }
 
 // monitors gps iterations, decided whether or not to continue
-type Continue func(v float64, jstar int, m []float64, trainingRisk, testRisk float64) bool
+type Continue func(v float64, jstar int, m []float64, trainingRisk, testRisk float64, cn []Normalization, rn Normalization) bool
 
 // advisory flags as to whether we need various components
 type CalcAdvisor struct {
