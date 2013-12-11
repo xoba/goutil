@@ -49,6 +49,14 @@ func NewMatrixWithElements(m, n int, elements []float64) *Matrix {
 	return &Matrix{Rows: m, Cols: n, ColumnStride: m, Elements: elements}
 }
 
+func (m *Matrix) Copy() *Matrix {
+	c := make([]float64, len(m.Elements))
+	if n := copy(c, m.Elements); n != len(m.Elements) {
+		panic("can't copy")
+	}
+	return NewMatrixWithElements(m.Rows, m.Cols, c)
+}
+
 func (m *Matrix) index(i, j int) int {
 	return j*m.ColumnStride + i
 }
