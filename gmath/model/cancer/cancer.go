@@ -17,58 +17,11 @@ import (
 type Tool struct {
 }
 
-func (*Tool) Name() string {
+func (Tool) Name() string {
 	return "cancer,run the standard cancer model"
 }
 
-type mon struct {
-	maxV     float64
-	csv      string
-	rp       *model.RegressionProblem
-	f        *os.File
-	min, max float64
-	oos      gmath.Function
-}
-
-func newMon(maxV float64, rp *model.RegressionProblem) *mon {
-	csv := "/tmp/" + uuid.New() + ".csv"
-
-	out := &mon{
-		maxV: maxV,
-		csv:  csv,
-		rp:   rp,
-		min:  math.MaxFloat64,
-		max:  -math.MaxFloat64,
-	}
-
-	f, err := os.Create(csv)
-	check(err)
-	out.f = f
-	fmt.Fprintf(f, "v\tjstar\toos\t%s\n", strings.Join(rp.ColumnNames, "\t"))
-
-	return out
-}
-
-func (x *mon) Continue(v float64, jstar int, m []float64, i, o float64) bool {
-	fmt.Fprintf(x.f, "%f\t%d\t%f", v, jstar, x.oos.Eval(v))
-	for _, y := range m {
-		fmt.Fprintf(x.f, "\t%f", y)
-		if y < x.min {
-			x.min = y
-		}
-		if y > x.max {
-			x.max = y
-		}
-	}
-	fmt.Fprintln(x.f)
-	return v < x.maxV
-}
-
-func (m *mon) Close() error {
-	return m.f.Close()
-}
-
-func (*Tool) Run(args []string) {
+func (Tool) Run(args []string) {
 	rp, _ := Load()
 	RunCancerCrossVal(rp)
 }
@@ -148,6 +101,53 @@ func RunCancerCrossVal(rp *model.RegressionProblem) {
 	cmd := exec.Command("evince", "Rplots.pdf")
 	cmd.Start()
 
+}
+
+type mon struct {
+	maxV     float64
+	csv      string
+	rp       *model.RegressionProblem
+	f        *os.File
+	min, max float64
+	oos      gmath.Function
+}
+
+func newMon(maxV float64, rp *model.RegressionProblem) *mon {
+	csv := "/tmp/" + uuid.New() + ".csv"
+
+	out := &mon{
+		maxV: maxV,
+		csv:  csv,
+		rp:   rp,
+		min:  math.MaxFloat64,
+		max:  -math.MaxFloat64,
+	}
+
+	f, err := os.Create(csv)
+	check(err)
+	out.f = f
+	fmt.Fprintf(f, "v\tjstar\toos\t%s\n", strings.Join(rp.ColumnNames, "\t"))
+
+	return out
+}
+
+func (x *mon) Continue(v float64, jstar int, m []float64, i, o float64) bool {
+	fmt.Fprintf(x.f, "%f\t%d\t%f", v, jstar, x.oos.Eval(v))
+	for _, y := range m {
+		fmt.Fprintf(x.f, "\t%f", y)
+		if y < x.min {
+			x.min = y
+		}
+		if y > x.max {
+			x.max = y
+		}
+	}
+	fmt.Fprintln(x.f)
+	return v < x.maxV
+}
+
+func (m *mon) Close() error {
+	return m.f.Close()
 }
 
 func shellScript(fn string) string {
