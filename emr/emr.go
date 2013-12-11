@@ -1007,7 +1007,11 @@ func IntegerSumReduce(ctx ReduceContext) {
 	}
 }
 
-func FloatSumReduce(ctx ReduceContext) {
+type FloatSumReducer struct {
+	Format string
+}
+
+func (f FloatSumReducer) Reduce(ctx ReduceContext) {
 	for j := range ctx.Input {
 		var total float64
 		for v := range j.Values {
@@ -1016,7 +1020,7 @@ func FloatSumReduce(ctx ReduceContext) {
 				total += i
 			}
 		}
-		ctx.Collector <- KeyValue{Key: j.Key, Value: fmt.Sprintf("%.10f", total)}
+		ctx.Collector <- KeyValue{Key: j.Key, Value: fmt.Sprintf(f.Format, total)}
 	}
 }
 
