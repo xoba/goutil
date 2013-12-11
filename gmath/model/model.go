@@ -76,22 +76,22 @@ func (m *FixedRoundsMonitor) Continue(v float64, jstar int, a []float64, i, o fl
 }
 
 type IntersectionMonitor struct {
-	A Monitor
+	A Continue
 	B PassiveMonitor
 }
 
 func (m *IntersectionMonitor) Continue(v float64, jstar int, a []float64, i, o float64) bool {
 	m.B(v, jstar, a, i, o)
-	return m.A.Continue(v, jstar, a, i, o)
+	return m.A(v, jstar, a, i, o)
 }
 
-func RunGps(rp *RegressionProblem, testSet *ObservationAssignments, dv float64, mon Monitor) *GpsResults {
+func RunGps(rp *RegressionProblem, testSet *ObservationAssignments, dv float64, mon Continue) *GpsResults {
 	rc := &LinearRegressionRisk{}
 	pc := NewLassoPenalty(len(rp.ColumnNames))
 	return RunGpsFull(rp, testSet, dv, rc, pc, mon)
 }
 
-func RunGpsFull(rp *RegressionProblem, tt *ObservationAssignments, dv float64, rc RiskCalculator, pc PenaltyCalculator, mon Monitor) *GpsResults {
+func RunGpsFull(rp *RegressionProblem, tt *ObservationAssignments, dv float64, rc RiskCalculator, pc PenaltyCalculator, proceed Continue) *GpsResults {
 
 	check(ValidateRegressionProblem(rp))
 
@@ -155,7 +155,7 @@ func RunGpsFull(rp *RegressionProblem, tt *ObservationAssignments, dv float64, r
 
 		testRisk := rc.CalcRisk(a, testMask, rp, ValueOnly).Value
 
-		if !mon.Continue(v, jstar, a, risk.Value, testRisk) {
+		if !proceed(v, jstar, a, risk.Value, testRisk) {
 			break
 		}
 	}
@@ -282,7 +282,7 @@ func Sgn(a float64) float64 {
 	return 0
 }
 
-type MonitorFactory func() Monitor
+type MonitorFactory func() Continue
 
 type CrossValResults struct {
 	TestRisk   gmath.Function
@@ -290,7 +290,7 @@ type CrossValResults struct {
 }
 
 // return monitor for final gps run after cross-val
-type FoldDecider func(oos gmath.Function) Monitor
+type FoldDecider func(oos gmath.Function) Continue
 
 /*
 
@@ -317,7 +317,7 @@ func RunCrossVal(folds int, dv float64, rp *RegressionProblem, rc RiskCalculator
 				builder.Set(v, testRisk)
 			},
 		}
-		RunGpsFull(rp, tt, dv, rc, pc, mon)
+		RunGpsFull(rp, tt, dv, rc, pc, mon.Continue)
 
 		f := builder.Init()
 

@@ -42,8 +42,8 @@ func RunCancerCrossVal(rp *model.RegressionProblem) {
 
 	oa := &model.RandomAssigner{rp.Data.Rows, 2.0 / 3.0}
 
-	mf := func() model.Monitor {
-		return &model.FixedVMonitor{vmax}
+	mf := func() model.Continue {
+		return (&model.FixedVMonitor{vmax}).Continue
 	}
 
 	m := newMon(vmax, rp)
@@ -51,7 +51,7 @@ func RunCancerCrossVal(rp *model.RegressionProblem) {
 
 	var bestV float64
 
-	fd := func(oos gmath.Function) model.Monitor {
+	fd := func(oos gmath.Function) model.Continue {
 
 		m.oos = oos
 
@@ -74,7 +74,7 @@ func RunCancerCrossVal(rp *model.RegressionProblem) {
 			return min
 		}()
 
-		return m
+		return m.Continue
 	}
 
 	cv := model.RunCrossVal(10, 0.001, rp, rc, pc, mf, oa, fd)

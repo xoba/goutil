@@ -49,11 +49,8 @@ type ObservationAssigner interface {
 	Assign() *ObservationAssignments
 }
 
-// monitors gps iterations
-type Monitor interface {
-	// whether or not to continue gps iterations
-	Continue(v float64, jstar int, m []float64, trainingRisk, testRisk float64) bool
-}
+// monitors gps iterations, decided whether or not to continue
+type Continue func(v float64, jstar int, m []float64, trainingRisk, testRisk float64) bool
 
 // advisory flags as to whether we need various components
 type CalcAdvisor struct {
