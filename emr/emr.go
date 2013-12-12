@@ -431,9 +431,22 @@ func runCounters(wg *sync.WaitGroup, counters chan Count) {
 func AlphaNumFilter(s string) string {
 	out := new(bytes.Buffer)
 	for _, x := range s {
-		if (x >= '0' && x <= '9') || (x >= 'A' && x <= 'Z') || (x >= 'a' && x <= 'z') {
+		switch {
+		case (x >= '0' && x <= '9') || (x >= 'A' && x <= 'Z') || (x >= 'a' && x <= 'z'):
+			fallthrough
+		case x == '(':
+			fallthrough
+		case x == ')':
+			fallthrough
+		case x == '[':
+			fallthrough
+		case x == ']':
+			fallthrough
+		case x == '*':
+			fallthrough
+		case x == ' ':
 			out.WriteRune(x)
-		} else {
+		default:
 			out.WriteRune('_')
 		}
 	}
