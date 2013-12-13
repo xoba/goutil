@@ -232,6 +232,9 @@ func NormalizeColumnsInPlace(m *la.Matrix, rowMask []float64) (out []Normalizati
 		}
 		norm := func() Normalization {
 			mean, variance := stats.MeanVariance(list)
+			if variance == 0 {
+				variance = 1.0
+			}
 			return Normalization{
 				Mean: mean,
 				Sd:   math.Sqrt(variance),
@@ -241,9 +244,7 @@ func NormalizeColumnsInPlace(m *la.Matrix, rowMask []float64) (out []Normalizati
 		for i := 0; i < m.Rows; i++ {
 			v := m.Get(i, j)
 			v = (v - norm.Mean) / norm.Sd
-			if !(math.IsNaN(v) || math.IsInf(v, 0)) {
-				m.Set(i, j, v)
-			}
+			m.Set(i, j, v)
 		}
 	}
 	return
