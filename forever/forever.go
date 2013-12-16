@@ -16,14 +16,14 @@ const MIN = time.Second
 
 // args are the name of tool to run forever, followed by its args
 func Run(args []string) {
-	name, err := os.Readlink(SELF_LINK)
+	path, err := os.Readlink(SELF_LINK)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("%s %v # running forever...\n", name, quote(args))
+	fmt.Printf("%s %v # running forever...\n", path, quote(args))
 	for {
 		start := time.Now()
-		reason, err := try(args)
+		reason, err := try(path, args)
 		if err != nil {
 			fmt.Printf("got error: %q; %v\n", reason, err)
 		}
@@ -34,11 +34,11 @@ func Run(args []string) {
 	}
 }
 
-func try(args []string) (string, error) {
+func try(path string, args []string) (string, error) {
 
 	wg := new(sync.WaitGroup)
 
-	cmd := exec.Command(SELF_LINK, args...)
+	cmd := exec.Command(path, args...)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
