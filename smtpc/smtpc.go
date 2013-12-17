@@ -2,8 +2,10 @@
 package smtpc
 
 import (
+	"bytes"
 	"fmt"
 	"net/smtp"
+	"strings"
 )
 
 type Auth struct {
@@ -17,6 +19,16 @@ type PlainTextEmail struct {
 	Subject string
 	Content string
 	Auth
+}
+
+func (p PlainTextEmail) String() string {
+	b := new(bytes.Buffer)
+	fmt.Fprintf(b, "From: %s\n", p.From)
+	fmt.Fprintf(b, "To: %s\n", strings.Join(p.To, ", "))
+	fmt.Fprintf(b, "Subject: %s\n", p.Subject)
+	fmt.Fprintln(b)
+	fmt.Fprint(b, p.Content)
+	return string(b.Bytes())
 }
 
 func Send(email PlainTextEmail) (err error) {
