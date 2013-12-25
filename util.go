@@ -4,6 +4,7 @@ package goutil
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math/rand"
@@ -307,4 +308,26 @@ type ReadCloser struct {
 
 func (r ReadCloser) Close() error {
 	return nil
+}
+
+func MarshalIndent(i interface{}) string {
+	if buf, err := json.MarshalIndent(i, "", "  "); err == nil {
+		return string(buf)
+	} else {
+		return fmt.Sprintf("%s", i)
+	}
+}
+
+func Marshal(i interface{}) string {
+	if buf, err := json.Marshal(i); err == nil {
+		return string(buf)
+	} else {
+		return fmt.Sprintf("%s", i)
+	}
+}
+
+func Check(e error) {
+	if e != nil {
+		panic(e)
+	}
 }
