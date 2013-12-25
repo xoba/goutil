@@ -4,6 +4,7 @@ package forever
 import (
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"strings"
@@ -20,12 +21,12 @@ func Run(args []string) {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("%s %v # running forever...\n", path, quote(args))
+	log.Printf("%s %v # running forever...\n", path, quote(args))
 	for {
 		start := time.Now()
 		reason, err := try(path, args)
 		if err != nil {
-			fmt.Printf("got error: %q; %v\n", reason, err)
+			log.Printf("got error: %q; %v\n", reason, err)
 		}
 		end := time.Now()
 		if end.Sub(start) < MIN {
