@@ -314,7 +314,7 @@ func MarshalIndent(i interface{}) string {
 	if buf, err := json.MarshalIndent(i, "", "  "); err == nil {
 		return string(buf)
 	} else {
-		return fmt.Sprintf("%s", i)
+		return fmt.Sprintf("%v", i)
 	}
 }
 
@@ -322,7 +322,7 @@ func Marshal(i interface{}) string {
 	if buf, err := json.Marshal(i); err == nil {
 		return string(buf)
 	} else {
-		return fmt.Sprintf("%s", i)
+		return fmt.Sprintf("%v", i)
 	}
 }
 
