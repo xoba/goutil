@@ -152,7 +152,9 @@ func Run(b Build) {
 		p := path.Clean("/" + pathUrl)
 		fmt.Printf("%s%s\n", b.Url, p)
 
-	case len(os.Args) < 2 || djson:
+	case len(os.Args) < 2 || djson || all || len(prefix) > 0:
+
+		toplevel := make(map[string]bool)
 
 		var names []string
 		for k := range tools {
@@ -181,10 +183,31 @@ func Run(b Build) {
 				row["tags"] = strings.Join(tags, ", ")
 			}
 
-			rows = append(rows, row)
-			if len(tags) > 0 {
-				hasTags = true
+			include := false
+
+			switch {
+
+			case all:
+				include = true
+			case len(prefix) > 0:
+				include = strings.HasPrefix(Name(v), prefix)
+			default:
+				parts := strings.Split(Name(v), ".")
+				root := parts[0]
+				include = !toplevel[root] || len(parts) == 1
 			}
+
+			if include {
+				parts := strings.Split(Name(v), ".")
+				root := parts[0]
+				toplevel[Name(v)] = true
+				toplevel[root] = true
+				rows = append(rows, row)
+				if len(tags) > 0 {
+					hasTags = true
+				}
+			}
+
 		}
 
 		cols := strings.Split("command,description,code", ",")
