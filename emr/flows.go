@@ -203,9 +203,9 @@ func LoadLines(ss3 s3.Interface, output *StepLocation, f func(string, *KeyValue)
 	LoadLines2(ss3, output, runtime.NumCPU(), decider, f)
 }
 
-type DeciderFunc func(string) bool
+type UrlDeciderFunc func(url string) bool
 
-func LoadLines2(ss3 s3.Interface, output *StepLocation, threads int, fileDecider DeciderFunc, f func(string, *KeyValue)) {
+func LoadLines2(ss3 s3.Interface, output *StepLocation, threads int, decider UrlDeciderFunc, f func(string, *KeyValue)) {
 	var wg, wg2 sync.WaitGroup
 	ch2 := make(chan *FileKeyValue)
 	ch := make(chan s3.Object)
@@ -220,8 +220,8 @@ func LoadLines2(ss3 s3.Interface, output *StepLocation, threads int, fileDecider
 		wg.Add(1)
 		go func() {
 			for o := range ch {
-				fn := o.Bucket + "/" + o.Key
-				if fileDecider(fn) {
+				fn := o.Url()
+				if decider(fn) {
 					r, err := ss3.Get(s3.GetRequest{Object: o})
 					check(err)
 					defer r.Close()
