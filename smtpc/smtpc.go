@@ -94,6 +94,7 @@ func SendMultipart(auth Auth, email PlainTextMultipartEmail) error {
 		foreverRetry(title, func() error {
 			return sendTo(auth, to, email)
 		})
+		log.Printf("sent email to %s\n", to)
 	}
 	return nil
 }
