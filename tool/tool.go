@@ -136,13 +136,14 @@ func SummarizeFlags(fs *flag.FlagSet) {
 
 func Run(b Build) {
 
-	var hidden, version, djson bool
-	var pathUrl string
+	var version, all, djson bool
+	var pathUrl, prefix string
 
 	flag.BoolVar(&version, "version", false, "detailed version information")
-	flag.BoolVar(&hidden, "hidden", false, "show hidden tools")
 	flag.BoolVar(&djson, "json", false, "show tools in json")
+	flag.BoolVar(&all, "all", false, "shows all tools, irrespective of prefix")
 	flag.StringVar(&pathUrl, "pathurl", "", "adds path onto build url")
+	flag.StringVar(&prefix, "prefix", "", "command name prefix to list")
 	flag.Parse()
 
 	switch {
@@ -151,7 +152,9 @@ func Run(b Build) {
 		p := path.Clean("/" + pathUrl)
 		fmt.Printf("%s%s\n", b.Url, p)
 
-	case len(os.Args) < 2 || hidden || djson:
+	case len(os.Args) < 2 || djson || all || len(prefix) > 0:
+
+		toplevel := make(map[string]bool)
 
 		var names []string
 		for k := range tools {
@@ -180,12 +183,31 @@ func Run(b Build) {
 				row["tags"] = strings.Join(tags, ", ")
 			}
 
-			if hidden || !strings.Contains(row["tags"], "hidden") {
+			include := false
+
+			switch {
+
+			case all:
+				include = true
+			case len(prefix) > 0:
+				include = strings.HasPrefix(Name(v), prefix)
+			default:
+				parts := strings.Split(Name(v), ".")
+				root := parts[0]
+				include = !toplevel[root] || len(parts) == 1
+			}
+
+			if include {
+				parts := strings.Split(Name(v), ".")
+				root := parts[0]
+				toplevel[Name(v)] = true
+				toplevel[root] = true
 				rows = append(rows, row)
 				if len(tags) > 0 {
 					hasTags = true
 				}
 			}
+
 		}
 
 		cols := strings.Split("command,description,code", ",")
