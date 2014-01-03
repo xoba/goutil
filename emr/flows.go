@@ -259,11 +259,7 @@ func LoadLines3(ss3 s3.Interface, output *StepLocation, threads int, proc FilePr
 	for i := 0; i < threads; i++ {
 		wg.Add(1)
 		go func() {
-			i := 0
 			for o := range ch {
-				if i++; i > 2 {
-					continue
-				}
 				fn := o.Url()
 				p := proc.ForFile(fn)
 				done := false
