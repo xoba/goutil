@@ -252,6 +252,74 @@ func LoadLines2(ss3 s3.Interface, output *StepLocation, threads int, decider Url
 	wg2.Wait()
 }
 
+// enables transactional processing of files
+func LoadLines3(ss3 s3.Interface, output *StepLocation, threads int, proc FileProcessor) {
+	var wg sync.WaitGroup
+	ch := make(chan s3.Object)
+	for i := 0; i < threads; i++ {
+		wg.Add(1)
+		go func() {
+			i := 0
+			for o := range ch {
+				if i++; i > 2 {
+					continue
+				}
+				fn := o.Url()
+				p := proc.ForFile(fn)
+				done := false
+				for !done {
+					r, err := ss3.Get(s3.GetRequest{Object: o})
+					if err != nil {
+						if p = proc.Failure(fn, err); p != nil {
+							continue
+						} else {
+							break
+						}
+					}
+					if strings.HasSuffix(o.Key, ".gz") {
+						r, err = gzip.NewReader(r)
+						check(err)
+					}
+					scanner := bufio.NewScanner(r)
+					for scanner.Scan() {
+						kv := ParseLine(scanner.Text())
+						p(&kv)
+					}
+					if err := scanner.Err(); rand.Intn(4) > 0 || err != nil {
+						r.Close()
+						if p = proc.Failure(fn, err); p != nil {
+							continue
+						} else {
+							break
+						}
+					} else {
+						proc.Success(fn)
+						done = true
+					}
+					r.Close()
+				}
+			}
+			wg.Done()
+		}()
+	}
+	List(ss3, output, ch)
+	wg.Wait()
+}
+
+type KeyValueProcessor func(*KeyValue)
+
+type FileProcessor interface {
+
+	// should return function to process keyvalue's from file
+	ForFile(url string) KeyValueProcessor
+
+	// indicates the given file was successfully processed
+	Success(url string)
+
+	// called upon failure processing a file; should return a processor if we want to retry
+	Failure(url string, err error) KeyValueProcessor
+}
+
 type FileKeyValue struct {
 	Filename string
 	Item     *KeyValue
