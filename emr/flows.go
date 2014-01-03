@@ -285,7 +285,7 @@ func LoadLines3(ss3 s3.Interface, output *StepLocation, threads int, proc FilePr
 						kv := ParseLine(scanner.Text())
 						p(&kv)
 					}
-					if err := scanner.Err(); rand.Intn(4) > 0 || err != nil {
+					if err := scanner.Err(); err != nil {
 						r.Close()
 						if p = proc.Failure(fn, err); p != nil {
 							continue
