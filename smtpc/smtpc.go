@@ -116,14 +116,17 @@ func SendTo(auth Auth, to string, email MultipartEmail) error {
 	mm.SetBoundary(boundary)
 	{
 		content := email.Content[0]
-
 		header := make(textproto.MIMEHeader)
 		header.Set("Content-Type", content.Type)
+		header.Set("Content-Transfer-Encoding", "base64")
 		part, err := mm.CreatePart(header)
 		if err != nil {
 			return err
 		}
-		part.Write(content.Data)
+		lw := &lineWriter{Writer: part, Length: 75}
+		e := base64.NewEncoder(base64.StdEncoding, lw)
+		e.Write(content.Data)
+		e.Close()
 	}
 	for _, a := range email.Attachments {
 		header := make(textproto.MIMEHeader)
