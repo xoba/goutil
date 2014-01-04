@@ -39,6 +39,11 @@ type MultipartEmail struct {
 	Attachments []Attachment
 }
 
+type Attachment struct {
+	Filename string
+	Content
+}
+
 // calculates a content signature of email
 func (m MultipartEmail) Signature() string {
 	return m.signContent()[:3] + m.signAttachments()[:3]
@@ -73,11 +78,6 @@ func sign(i interface{}) string {
 	h := md5.New()
 	h.Write(buf)
 	return fmt.Sprintf("%x", h.Sum(nil))
-}
-
-type Attachment struct {
-	Filename string
-	Content
 }
 
 const crlf = "\r\n"
