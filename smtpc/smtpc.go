@@ -3,7 +3,6 @@ package smtpc
 
 import (
 	"bytes"
-	"code.google.com/p/go-uuid/uuid"
 	"crypto/md5"
 	"crypto/rand"
 	"encoding/base64"
@@ -14,7 +13,6 @@ import (
 	"mime/multipart"
 	"net/smtp"
 	"net/textproto"
-	"strings"
 	"time"
 )
 
@@ -23,83 +21,83 @@ type Auth struct {
 	Port                 int
 }
 
-type PlainTextEmail struct {
+type Meta struct {
 	To      []string
+	Cc      []string
 	From    string
 	Subject string
-	Content string
 }
 
-func (p PlainTextEmail) String() string {
-	b := new(bytes.Buffer)
-	fmt.Fprintf(b, "From: %s\n", p.From)
-	fmt.Fprintf(b, "To: %s\n", strings.Join(p.To, ", "))
-	fmt.Fprintf(b, "Subject: %s\n", p.Subject)
-	fmt.Fprintln(b)
-	fmt.Fprint(b, p.Content)
-	return string(b.Bytes())
+type Content struct {
+	Type string
+	Data []byte
 }
 
-type PlainTextMultipartEmail struct {
-	PlainTextEmail
+type MultipartEmail struct {
+	Meta
+	Content     []Content // alternative presentations of same content
 	Attachments []Attachment
 }
 
 // calculates a content signature of email
-func (m PlainTextMultipartEmail) Signature() string {
+func (m MultipartEmail) Signature() string {
 	return m.signContent()[:3] + m.signAttachments()[:3]
 }
 
-type Attachment struct {
-	Filename    string
-	ContentType string
-	Content     []byte
+func (m MultipartEmail) signContent() string {
+	x := make(map[string]string)
+	x["from"] = m.From
+	x["subject"] = m.Subject
+	for i, c := range m.Content {
+		x[fmt.Sprintf("contenttype-%d", i)] = c.Type
+		x[fmt.Sprintf("content-%d", i)] = fmt.Sprintf("%x", c.Data)
+	}
+	return sign(x)
 }
 
-func (a Attachment) GetId() string {
-	return uuid.New()
+func (m MultipartEmail) signAttachments() string {
+	x := make(map[string]int)
+	for _, a := range m.Attachments {
+		y := make(map[string]interface{})
+		y["filename"] = a.Filename
+		y["contenttype"] = a.Type
+		y["content"] = a.Data
+		x[sign(y)]++
+	}
+	return sign(x)
+}
+
+func sign(i interface{}) string {
+	buf, err := json.Marshal(i)
+	check(err)
+	h := md5.New()
+	h.Write(buf)
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+type Attachment struct {
+	Filename string
+	Content
 }
 
 const crlf = "\r\n"
 
-func Send(auth Auth, email PlainTextEmail) (err error) {
-
-	a := smtp.PlainAuth("", auth.User, auth.Password, auth.Host)
-
-	msg := ""
-
-	msg += "Subject: " + email.Subject + crlf
-
-	for _, x := range email.To {
-		msg += "To: " + x + crlf
-	}
-
-	msg += crlf
-
-	msg += email.Content
-
-	addr := fmt.Sprintf("%s:%d", auth.Host, auth.Port)
-
-	err = smtp.SendMail(addr, a, email.From, email.To, []byte(msg))
-	if err != nil {
-		return
-	}
-
-	return
-}
-
-func SendMultipart(auth Auth, email PlainTextMultipartEmail) error {
+func Send(auth Auth, email MultipartEmail) error {
 	for i, to := range email.To {
 		title := fmt.Sprintf("%3d/%3d. %s", i+1, len(email.To), to)
 		foreverRetry(title, func() error {
-			return sendTo(auth, to, email)
+			return SendTo(auth, to, email)
 		})
 		log.Printf("sent email to %s\n", to)
 	}
 	return nil
 }
 
-func sendTo(auth Auth, to string, email PlainTextMultipartEmail) error {
+// only allows single content
+func SendTo(auth Auth, to string, email MultipartEmail) error {
+	if len(email.Content) != 1 {
+		panic("only 1 content supported")
+	}
 	a := smtp.PlainAuth("", auth.User, auth.Password, auth.Host)
 	buf := new(bytes.Buffer)
 	boundary := randomBoundary()
@@ -117,63 +115,34 @@ func sendTo(auth Auth, to string, email PlainTextMultipartEmail) error {
 	mm := multipart.NewWriter(buf)
 	mm.SetBoundary(boundary)
 	{
+		content := email.Content[0]
+
 		header := make(textproto.MIMEHeader)
-		header.Set("Content-Type", "text/plain")
+		header.Set("Content-Type", content.Type)
 		part, err := mm.CreatePart(header)
 		if err != nil {
 			return err
 		}
-		fmt.Fprintln(part, email.Content)
-
+		part.Write(content.Data)
 	}
 	for _, a := range email.Attachments {
 		header := make(textproto.MIMEHeader)
-		header.Set("Content-Type", fmt.Sprintf(`%s; name="%s"`, a.ContentType, a.Filename))
+		header.Set("Content-Type", fmt.Sprintf(`%s; name="%s"`, a.Type, a.Filename))
 		header.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, a.Filename))
 		header.Set("Content-Transfer-Encoding", "base64")
-		header.Set("X-Attachment-Id", a.GetId())
 		part, err := mm.CreatePart(header)
 		if err != nil {
 			return err
 		}
 		lw := &lineWriter{Writer: part, Length: 75}
 		e := base64.NewEncoder(base64.StdEncoding, lw)
-		e.Write(a.Content)
+		e.Write(a.Data)
 		e.Close()
 	}
 	mm.Close()
 	addr := fmt.Sprintf("%s:%d", auth.Host, auth.Port)
 	return smtp.SendMail(addr, a, email.From, []string{to}, buf.Bytes())
 
-}
-
-// calculates a content signature of email
-func (m PlainTextMultipartEmail) signContent() string {
-	x := make(map[string]string)
-	x["from"] = m.From
-	x["subject"] = m.Subject
-	x["content"] = m.Content
-	return sign(x)
-}
-
-func sign(i interface{}) string {
-	buf, err := json.Marshal(i)
-	check(err)
-	h := md5.New()
-	h.Write(buf)
-	return fmt.Sprintf("%x", h.Sum(nil))
-}
-
-func (m PlainTextMultipartEmail) signAttachments() string {
-	x := make(map[string]int)
-	for _, a := range m.Attachments {
-		y := make(map[string]interface{})
-		y["filename"] = a.Filename
-		y["contenttype"] = a.ContentType
-		y["content"] = a.Content
-		x[sign(y)]++
-	}
-	return sign(x)
 }
 
 func foreverRetry(name string, f func() error) {
