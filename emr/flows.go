@@ -262,6 +262,9 @@ func LoadLines3(ss3 s3.Interface, output *StepLocation, threads int, proc FilePr
 			for o := range ch {
 				fn := o.Url()
 				p := proc.ForFile(fn)
+				if p == nil {
+					continue
+				}
 				done := false
 				for !done {
 					r, err := ss3.Get(s3.GetRequest{Object: o})
@@ -306,7 +309,7 @@ type KeyValueProcessor func(*KeyValue)
 
 type FileProcessor interface {
 
-	// should return function to process keyvalue's from file
+	// should return function to process keyvalue's from file, or nil if no processing
 	ForFile(url string) KeyValueProcessor
 
 	// indicates the given file was successfully processed
