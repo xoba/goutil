@@ -262,11 +262,7 @@ func LoadLines3(ss3 s3.Interface, output *StepLocation, threads int, proc FilePr
 			for o := range ch {
 				fn := o.Url()
 				p := proc.ForFile(fn)
-				if p == nil {
-					continue
-				}
-				done := false
-				for !done {
+				for p != nil {
 					r, err := ss3.Get(s3.GetRequest{Object: o})
 					if err != nil {
 						if p = proc.Failure(fn, err); p != nil {
@@ -293,7 +289,7 @@ func LoadLines3(ss3 s3.Interface, output *StepLocation, threads int, proc FilePr
 						}
 					} else {
 						proc.Success(fn)
-						done = true
+						p = nil
 					}
 					r.Close()
 				}
@@ -307,6 +303,7 @@ func LoadLines3(ss3 s3.Interface, output *StepLocation, threads int, proc FilePr
 
 type KeyValueProcessor func(*KeyValue)
 
+// each KeyValueProcessor called from just a single thread
 type FileProcessor interface {
 
 	// should return function to process keyvalue's from file, or nil if no processing
