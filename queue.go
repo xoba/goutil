@@ -9,10 +9,12 @@ import (
 )
 
 type WorkQueue interface {
+
 	// submit a function to queue
 	Submit(f func())
+
 	// close queue and wait for all functions to execute
-	Finish()
+	Wait()
 }
 
 func NewWorkQueue(n int) WorkQueue {
@@ -39,7 +41,7 @@ func (w iWorkQueue) Submit(f func()) {
 	w.ch <- f
 }
 
-func (w iWorkQueue) Finish() {
+func (w iWorkQueue) Wait() {
 	close(w.ch)
 	w.wg.Wait()
 }
@@ -67,7 +69,7 @@ func (t Tool) Run(args []string) {
 		q.Submit(work)
 	}
 
-	q.Finish()
+	q.Wait()
 
 	fmt.Println(started, ended)
 
