@@ -326,6 +326,18 @@ func Marshal(i interface{}) string {
 	}
 }
 
+type TimeList []time.Time
+
+func (r TimeList) Len() int {
+	return len(r)
+}
+func (r TimeList) Less(i, j int) bool {
+	return r[i].Before(r[j])
+}
+func (r TimeList) Swap(i, j int) {
+	r[i], r[j] = r[j], r[i]
+}
+
 func Check(e error) {
 	if e != nil {
 		panic(e)
