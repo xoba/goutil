@@ -105,6 +105,7 @@ func SendTo(auth Auth, to string, email MultipartEmail) error {
 	header.Set("Subject", email.Subject)
 	header.Set("From", email.From)
 	header.Set("To", to)
+	header.Set("MIME-Version", "1.0")
 	header.Set("Content-Type", "multipart/mixed; boundary="+boundary)
 	for k, v := range header {
 		for _, s := range v {
