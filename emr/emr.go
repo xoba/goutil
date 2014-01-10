@@ -275,11 +275,11 @@ func Run(flow Flow) {
 	v.Set("Action", "RunJobFlow")
 
 	v.Set("Name", id)
-	v.Set("AmiVersion", "3.0.2")
+	v.Set("AmiVersion", "2.4.2")
 	v.Set("LogUri", fmt.Sprintf("s3n://%s/%s", flow.LogBucket, id))
 
 	v.Set("Instances.Ec2KeyName", flow.KeyName)
-	v.Set("Instances.HadoopVersion", "2.2.0")
+	v.Set("Instances.HadoopVersion", "1.0.3")
 
 	if len(flow.AvailabilityZone) == 0 {
 		flow.AvailabilityZone = "us-east-1d"
