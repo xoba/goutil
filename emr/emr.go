@@ -230,9 +230,9 @@ type Flow struct {
 	Steps              []Step
 	Instances          int
 	MasterInstanceType string
-	MasterSpotPrice    float64
+	MasterSpotPrice    float64 `json:",omitempty"`
 	SlaveInstanceType  string
-	SlaveSpotPrice     float64
+	SlaveSpotPrice     float64 `json:",omitempty"`
 	ScriptBucket       string
 	LogBucket          string
 	KeepAlive          bool
@@ -261,6 +261,11 @@ func Run(flow Flow) {
 
 	validate(flow)
 
+	if !flow.IsSpot {
+		flow.MasterSpotPrice = 0
+		flow.SlaveSpotPrice = 0
+	}
+
 	id := fmt.Sprintf("%s-%s_%s_%s", flow.Steps[0].Mapper.Name(), flow.Steps[0].Reducer.Name(), time.Now().UTC().Format("20060102T150405Z"), uuid.New()[:4])
 
 	ss3 := s3.GetDefault(flow.Auth)
@@ -270,10 +275,11 @@ func Run(flow Flow) {
 	v.Set("Action", "RunJobFlow")
 
 	v.Set("Name", id)
-	v.Set("AmiVersion", "latest")
+	v.Set("AmiVersion", "3.0.2")
 	v.Set("LogUri", fmt.Sprintf("s3n://%s/%s", flow.LogBucket, id))
 
 	v.Set("Instances.Ec2KeyName", flow.KeyName)
+	v.Set("Instances.HadoopVersion", "2.2.0")
 
 	if len(flow.AvailabilityZone) == 0 {
 		flow.AvailabilityZone = "us-east-1d"
@@ -294,7 +300,7 @@ func Run(flow Flow) {
 		v.Set("Instances.InstanceGroups.member.2.Market", "SPOT")
 		v.Set("Instances.InstanceGroups.member.2.BidPrice", fmt.Sprintf("%.3f", flow.SlaveSpotPrice))
 		v.Set("Instances.InstanceGroups.member.2.InstanceType", flow.SlaveInstanceType)
-		v.Set("Instances.InstanceGroups.member.2.InstanceCount", fmt.Sprintf("%d", flow.Instances))
+		v.Set("Instances.InstanceGroups.member.2.InstanceCount", fmt.Sprintf("%d", flow.Instances-1))
 	} else {
 		v.Set("Instances.MasterInstanceType", flow.MasterInstanceType)
 		v.Set("Instances.SlaveInstanceType", flow.SlaveInstanceType)
