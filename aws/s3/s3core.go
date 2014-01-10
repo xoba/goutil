@@ -135,6 +135,34 @@ func head(auth aws.Auth, req Object) (*HeadResponse, error) {
 	return hr, nil
 }
 
+func putPolicy(auth aws.Auth, bucket, policy string) error {
+	now := time.Now()
+	sig, err := signPut(fmt.Sprintf("/%s/?policy", bucket), "", "", auth, now)
+	if err != nil {
+		return err
+	}
+	transport := http.DefaultTransport
+	hreq, err := http.NewRequest("PUT", "https://s3.amazonaws.com/?policy", strings.NewReader(policy))
+	if err != nil {
+		return err
+	}
+	hreq.Host = fmt.Sprintf("%s.s3.amazonaws.com", bucket)
+	hreq.Header.Add("Date", format(now))
+	hreq.Header.Add("Authorization", "AWS "+auth.AccessKey+":"+sig)
+	resp, err := transport.RoundTrip(hreq)
+	if err != nil {
+		return err
+	}
+	io.Copy(os.Stdout, resp.Body)
+	resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return errors.New(resp.Status)
+	}
+
+	return nil
+}
+
 func buckets(auth aws.Auth) (*ListAllMyBucketsResult, error) {
 	u, err := createURL2()
 	if err != nil {
@@ -396,14 +424,6 @@ func sign(a aws.Auth, toSign string) (signature string, err error) {
 	}
 	signature = buf.String()
 	return
-}
-
-func esc(s string) string {
-	if true {
-		return url.QueryEscape(s)
-	} else {
-		return strings.Replace(s, " ", "+", -1)
-	}
 }
 
 func str(v interface{}) string {
