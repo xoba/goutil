@@ -21,6 +21,7 @@ type Interface interface {
 	List(req ListRequest) (ListBucketResult, error)
 	Delete(req DeleteRequest) error
 	Buckets() (*ListAllMyBucketsResult, error)
+	MakePublic(bucket string) error
 }
 
 func GetDefault(a aws.Auth) Interface {
@@ -142,6 +143,11 @@ func (s SmartS3) Get(req GetRequest) (io.ReadCloser, error) {
 	} else {
 		return v.(io.ReadCloser), err
 	}
+}
+
+func (s SmartS3) MakePublic(bucket string) error {
+	policy := fmt.Sprintf(`{"Statement":[{"Action":"s3:GetObject","Effect":"Allow","Principal":{"AWS":"*"},"Resource":"arn:aws:s3:::%s/*","Sid":"AllowPublicRead"}],"Version":"2008-10-17"}`, bucket)
+	return putPolicy(s.Auth, bucket, policy)
 }
 
 func (s SmartS3) Buckets() (*ListAllMyBucketsResult, error) {
