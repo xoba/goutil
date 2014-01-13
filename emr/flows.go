@@ -208,7 +208,7 @@ type UrlDeciderFunc func(url string) bool
 func LoadLines2(ss3 s3.Interface, output *StepLocation, threads int, decider UrlDeciderFunc, f func(string, *KeyValue)) {
 	var wg, wg2 sync.WaitGroup
 	ch2 := make(chan *FileKeyValue)
-	ch := make(chan s3.Object)
+	ch := make(chan s3.ListedObject)
 	wg2.Add(1)
 	go func() {
 		for fkv := range ch2 {
@@ -220,9 +220,9 @@ func LoadLines2(ss3 s3.Interface, output *StepLocation, threads int, decider Url
 		wg.Add(1)
 		go func() {
 			for o := range ch {
-				fn := o.Url()
+				fn := o.Object().Url()
 				if decider(fn) {
-					r, err := ss3.Get(s3.GetRequest{Object: o})
+					r, err := ss3.Get(s3.GetRequest{Object: o.Object()})
 					check(err)
 					defer r.Close()
 					if strings.HasSuffix(o.Key, ".gz") {
@@ -255,17 +255,17 @@ func LoadLines2(ss3 s3.Interface, output *StepLocation, threads int, decider Url
 // enables transactional processing of files
 func LoadLines3(ss3 s3.Interface, output *StepLocation, threads int, proc FileProcessor) {
 	var wg sync.WaitGroup
-	ch := make(chan s3.Object)
+	ch := make(chan s3.ListedObject)
 	for i := 0; i < threads; i++ {
 		wg.Add(1)
 		go func() {
 			for o := range ch {
-				fn := o.Url()
-				p := proc.ForFile(fn)
+				fn := o.Object().Url()
+				p := proc.ForFile(fn, o.Size)
 				for p != nil {
-					r, err := ss3.Get(s3.GetRequest{Object: o})
+					r, err := ss3.Get(s3.GetRequest{Object: o.Object()})
 					if err != nil {
-						if p = proc.Failure(fn, err); p != nil {
+						if p = proc.Failure(fn, o.Size, err); p != nil {
 							continue
 						} else {
 							break
@@ -282,7 +282,7 @@ func LoadLines3(ss3 s3.Interface, output *StepLocation, threads int, proc FilePr
 					}
 					if err := scanner.Err(); err != nil {
 						r.Close()
-						if p = proc.Failure(fn, err); p != nil {
+						if p = proc.Failure(fn, o.Size, err); p != nil {
 							continue
 						} else {
 							break
@@ -307,13 +307,13 @@ type KeyValueProcessor func(*KeyValue)
 type FileProcessor interface {
 
 	// should return function to process keyvalue's from file, or nil if no processing
-	ForFile(url string) KeyValueProcessor
+	ForFile(url string, size int) KeyValueProcessor
 
 	// indicates the given file was successfully processed
 	Success(url string)
 
 	// called upon failure processing a file; should return a processor if we want to retry
-	Failure(url string, err error) KeyValueProcessor
+	Failure(url string, size int, err error) KeyValueProcessor
 }
 
 type FileKeyValue struct {
@@ -322,7 +322,7 @@ type FileKeyValue struct {
 }
 
 // randomize order of each listing batch
-func List(ss3 s3.Interface, output *StepLocation, ch chan s3.Object) {
+func List(ss3 s3.Interface, output *StepLocation, ch chan s3.ListedObject) {
 	var marker string
 	for {
 		r, err := ss3.List(s3.ListRequest{MaxKeys: 1000, Bucket: output.Bucket, Prefix: output.Prefix, Marker: marker})
@@ -334,7 +334,10 @@ func List(ss3 s3.Interface, output *StepLocation, ch chan s3.Object) {
 
 		for i := 0; i < len(r.Contents); i++ {
 			v := r.Contents[p[i]]
-			ch <- s3.Object{Bucket: output.Bucket, Key: v.Key}
+			ch <- s3.ListedObject{
+				ListBucketResultContents: v,
+				Bucket: output.Bucket,
+			}
 		}
 
 		if r.IsTruncated {

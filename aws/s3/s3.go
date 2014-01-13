@@ -101,6 +101,18 @@ type ListBucketResultContents struct {
 	LastModified            time.Time `json:",omitempty"`
 }
 
+type ListedObject struct {
+	ListBucketResultContents
+	Bucket string
+}
+
+func (b ListedObject) Object() Object {
+	return Object{
+		Bucket: b.Bucket,
+		Key:    b.Key,
+	}
+}
+
 type ListBucketResult struct {
 	Name, Prefix, Marker, Delimiter string
 	MaxKeys                         int64
