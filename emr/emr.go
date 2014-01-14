@@ -275,7 +275,7 @@ func Run(flow Flow) {
 	v.Set("Action", "RunJobFlow")
 
 	v.Set("Name", id)
-	v.Set("AmiVersion", "2.4.2")
+	v.Set("AmiVersion", "2.4.3")
 	v.Set("LogUri", fmt.Sprintf("s3n://%s/%s", flow.LogBucket, id))
 
 	v.Set("Instances.Ec2KeyName", flow.KeyName)
