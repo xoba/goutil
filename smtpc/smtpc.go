@@ -40,7 +40,8 @@ type MultipartEmail struct {
 }
 
 type Attachment struct {
-	Filename string
+	Filename  string
+	ContentID string
 	Content
 }
 
@@ -132,6 +133,9 @@ func SendTo(auth Auth, to string, email MultipartEmail) error {
 	for _, a := range email.Attachments {
 		header := make(textproto.MIMEHeader)
 		header.Set("Content-Type", fmt.Sprintf(`%s; name="%s"`, a.Type, a.Filename))
+		if len(a.ContentID) > 0 {
+			header.Set("Content-ID", fmt.Sprintf(`<%s>`, a.ContentID))
+		}
 		header.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, a.Filename))
 		header.Set("Content-Transfer-Encoding", "base64")
 		part, err := mm.CreatePart(header)
