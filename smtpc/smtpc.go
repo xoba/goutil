@@ -9,16 +9,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"mime/multipart"
 	"net/smtp"
 	"net/textproto"
-	"time"
+	"strings"
 )
 
 type Auth struct {
-	User, Password, Host string
-	Port                 int
+	User     string // for aws ses, the key id
+	Password string // for aws ses, the secret key
+	Host     string
+	Port     int // for aws ses, 587 would work
 }
 
 type Meta struct {
@@ -83,19 +84,8 @@ func sign(i interface{}) string {
 
 const crlf = "\r\n"
 
-func Send(auth Auth, email MultipartEmail) error {
-	for i, to := range email.To {
-		title := fmt.Sprintf("%3d/%3d. %s", i+1, len(email.To), to)
-		foreverRetry(title, func() error {
-			return SendTo(auth, to, email)
-		})
-		log.Printf("sent email to %s\n", to)
-	}
-	return nil
-}
-
 // only allows single content
-func SendTo(auth Auth, to string, email MultipartEmail) error {
+func SendMulti(auth Auth, email MultipartEmail) error {
 	if len(email.Content) != 1 {
 		panic("only 1 content supported")
 	}
@@ -105,7 +95,7 @@ func SendTo(auth Auth, to string, email MultipartEmail) error {
 	header := make(textproto.MIMEHeader)
 	header.Set("Subject", email.Subject)
 	header.Set("From", email.From)
-	header.Set("To", to)
+	header.Set("To", strings.Join(email.To, ", "))
 	header.Set("MIME-Version", "1.0")
 	header.Set("Content-Type", "multipart/mixed; boundary="+boundary)
 	for k, v := range header {
@@ -149,20 +139,10 @@ func SendTo(auth Auth, to string, email MultipartEmail) error {
 	}
 	mm.Close()
 	addr := fmt.Sprintf("%s:%d", auth.Host, auth.Port)
-	return smtp.SendMail(addr, a, email.From, []string{to}, buf.Bytes())
+	return smtp.SendMail(addr, a, email.From, email.To, buf.Bytes())
 
 }
 
-func foreverRetry(name string, f func() error) {
-	for {
-		if err := f(); err == nil {
-			return
-		} else {
-			log.Printf("failed to run %s: %v; going to retry\n", name, err)
-			time.Sleep(3 * time.Second)
-		}
-	}
-}
 func randomBoundary() string {
 	var buf [30]byte
 	_, err := io.ReadFull(rand.Reader, buf[:])
