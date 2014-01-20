@@ -253,6 +253,9 @@ type Step struct {
 	ToolChecker        ToolChecker       `json:",omitempty"`
 	Vars               map[string]string `json:",omitempty"`
 
+	// additional args on streaming command
+	Args []string `json:",omitempty"`
+
 	// this is a big one: determines whether input files are lists of url's or not
 	IndirectMapJob bool `json:",omitempty"`
 }
@@ -329,9 +332,18 @@ func Run(flow Flow) {
 		mapperObject := s3.Object{Bucket: flow.ScriptBucket, Key: "mapper/" + id}
 		reducerObject := s3.Object{Bucket: flow.ScriptBucket, Key: "reducer/" + id}
 
-		check(ss3.PutObject(s3.PutObjectRequest{BasePut: s3.BasePut{Object: mapperObject, ContentType: "application/octet-stream"}, Data: []byte(createScript(step.Mapper, step.ToolChecker, fmt.Sprintf("-indirect=%v", step.IndirectMapJob)))}))
+		{
+			var args []string
+			args = append(args, fmt.Sprintf("-indirect=%v", step.IndirectMapJob))
+			args = append(args, step.Args...)
+			check(ss3.PutObject(s3.PutObjectRequest{BasePut: s3.BasePut{Object: mapperObject, ContentType: "application/octet-stream"}, Data: []byte(createScript(step.Mapper, step.ToolChecker, args...))}))
+		}
 
-		check(ss3.PutObject(s3.PutObjectRequest{BasePut: s3.BasePut{Object: reducerObject, ContentType: "application/octet-stream"}, Data: []byte(createScript(step.Reducer, step.ToolChecker))}))
+		{
+			var args []string
+			args = append(args, step.Args...)
+			check(ss3.PutObject(s3.PutObjectRequest{BasePut: s3.BasePut{Object: reducerObject, ContentType: "application/octet-stream"}, Data: []byte(createScript(step.Reducer, step.ToolChecker, args...))}))
+		}
 
 		{
 			v.Set(fmt.Sprintf("Steps.member.%d.Name", n), step.Name)
