@@ -1034,7 +1034,7 @@ func IntegerSumReduce(ctx ReduceContext) {
 				count += i
 			}
 		}
-		ctx.Collector <- KeyValue{Key: j.Key, Value: fmt.Sprintf("%d", count)}
+		ctx.Collector <- KeyValue{Key: j.Key, Value: strconv.FormatInt(count, 10)}
 	}
 }
 
