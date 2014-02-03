@@ -2,7 +2,6 @@ package emr
 
 import (
 	"bufio"
-	"code.google.com/p/go-uuid/uuid"
 	"compress/gzip"
 	"encoding/json"
 	"encoding/xml"
@@ -12,7 +11,6 @@ import (
 	"github.com/xoba/goutil/aws/s3"
 	"math/rand"
 	"net/url"
-	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -108,23 +106,9 @@ func (m *ShowFlow) Run(args []string) {
 	}
 
 	if len(r.MasterDNS) > 0 {
-
-		dir := fmt.Sprintf("/run/shm/chrome/chrome_%s", uuid.New())
-
-		os.MkdirAll(dir, os.ModePerm)
-
-		f, err := os.Create(dir + "/First Run")
-		check(err)
-		f.Close()
-
-		cmd := exec.Command("google-chrome",
-			fmt.Sprintf("--user-data-dir=%s", dir),
-			"--window-size=1280,1024", fmt.Sprintf("http://%s:9100", r.MasterDNS))
-
+		cmd := exec.Command("xdg-open", fmt.Sprintf("http://%s:9100", r.MasterDNS))
 		cmd.Dir = "/tmp"
-
 		cmd.Start()
-
 	}
 
 }
