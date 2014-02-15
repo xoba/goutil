@@ -134,7 +134,11 @@ func SummarizeFlags(fs *flag.FlagSet) {
 	})
 }
 
-func Run(b Build) {
+func Run(b *Build) {
+
+	if b == nil {
+		b = &Build{}
+	}
 
 	var version, all, djson bool
 	var pathUrl, prefix string
