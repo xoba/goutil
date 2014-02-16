@@ -25,6 +25,10 @@ func NewJson(b []byte) (*Json, error) {
 	}
 }
 
+func (j *Json) Unwrap() interface{} {
+	return j.data
+}
+
 func (j *Json) AsMap() (map[string]interface{}, error) {
 	if m, ok := (j.data).(map[string]interface{}); ok {
 		return m, nil
@@ -104,6 +108,27 @@ func (j *Json) AsBool() (bool, error) {
 		return s, nil
 	}
 	return false, errors.New("type assertion to bool failed")
+}
+
+func (j *Json) AsInt() (int, error) {
+	switch t := j.data.(type) {
+	case json.Number:
+		i, err := t.Int64()
+		return int(i), err
+	case int:
+		return t, nil
+	}
+	return 0, errors.New("can't convert to int")
+}
+
+func (j *Json) AsFloat64() (float64, error) {
+	switch t := j.data.(type) {
+	case json.Number:
+		return t.Float64()
+	case float64:
+		return t, nil
+	}
+	return 0, errors.New("can't convert to int")
 }
 
 func (j *Json) AsString() (string, error) {
