@@ -112,11 +112,35 @@ func (j *Json) AsBool() (bool, error) {
 
 func (j *Json) AsInt() (int, error) {
 	switch t := j.data.(type) {
+
 	case json.Number:
 		i, err := t.Int64()
 		return int(i), err
 	case int:
 		return t, nil
+	case uint:
+		return int(t), nil
+	case float32:
+		return int(t), nil
+	case float64:
+		return int(t), nil
+	case int8:
+		return int(t), nil
+	case int16:
+		return int(t), nil
+	case int32:
+		return int(t), nil
+	case int64:
+		return int(t), nil
+	case uint8:
+		return int(t), nil
+	case uint16:
+		return int(t), nil
+	case uint32:
+		return int(t), nil
+	case uint64:
+		return int(t), nil
+
 	}
 	return 0, errors.New("can't convert to int")
 }
@@ -125,8 +149,32 @@ func (j *Json) AsFloat64() (float64, error) {
 	switch t := j.data.(type) {
 	case json.Number:
 		return t.Float64()
+
+	case int:
+		return float64(t), nil
+	case uint:
+		return float64(t), nil
+	case float32:
+		return float64(t), nil
 	case float64:
 		return t, nil
+	case int8:
+		return float64(t), nil
+	case int16:
+		return float64(t), nil
+	case int32:
+		return float64(t), nil
+	case int64:
+		return float64(t), nil
+	case uint8:
+		return float64(t), nil
+	case uint16:
+		return float64(t), nil
+	case uint32:
+		return float64(t), nil
+	case uint64:
+		return float64(t), nil
+
 	}
 	return 0, errors.New("can't convert to int")
 }
