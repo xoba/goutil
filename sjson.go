@@ -12,6 +12,10 @@ type Json struct {
 	data interface{}
 }
 
+func WrapJson(i interface{}) *Json {
+	return &Json{i}
+}
+
 func NewJson(b []byte) (*Json, error) {
 	j := new(Json)
 	if err := j.UnmarshalJSON(b); err != nil {
