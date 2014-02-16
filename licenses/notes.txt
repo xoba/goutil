@@ -1,0 +1,5 @@
+the various files in this directory cover licensing issues to the best
+of our knowledge, for both our original contributions and also where
+we've adapted code written by others. if you feel we've omitted any
+credit where credit is due, we'd be more than happy to rectify and
+re-publish.
