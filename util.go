@@ -338,6 +338,23 @@ func (r TimeList) Swap(i, j int) {
 	r[i], r[j] = r[j], r[i]
 }
 
+type KeyValue struct {
+	Key   string
+	Value float64
+}
+type KeyValueList []KeyValue
+
+func (k KeyValueList) Len() int {
+	return len(k)
+}
+func (k KeyValueList) Less(i, j int) bool {
+	return k[i].Value < k[j].Value
+}
+
+func (k KeyValueList) Swap(i, j int) {
+	k[i], k[j] = k[j], k[i]
+}
+
 func Check(e error) {
 	if e != nil {
 		panic(e)
