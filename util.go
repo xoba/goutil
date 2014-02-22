@@ -338,20 +338,41 @@ func (r TimeList) Swap(i, j int) {
 	r[i], r[j] = r[j], r[i]
 }
 
-type KeyValue struct {
+// ----------------------------------------
+
+type KeyValueF struct {
 	Key   string
 	Value float64
 }
-type KeyValueList []KeyValue
+type KeyValueListF []KeyValueF
 
-func (k KeyValueList) Len() int {
+func (k KeyValueListF) Len() int {
 	return len(k)
 }
-func (k KeyValueList) Less(i, j int) bool {
+func (k KeyValueListF) Less(i, j int) bool {
 	return k[i].Value < k[j].Value
 }
 
-func (k KeyValueList) Swap(i, j int) {
+func (k KeyValueListF) Swap(i, j int) {
+	k[i], k[j] = k[j], k[i]
+}
+
+// ----------------------------------------
+
+type KeyValueI struct {
+	Key   string
+	Value int
+}
+type KeyValueListI []KeyValueI
+
+func (k KeyValueListI) Len() int {
+	return len(k)
+}
+func (k KeyValueListI) Less(i, j int) bool {
+	return k[i].Value < k[j].Value
+}
+
+func (k KeyValueListI) Swap(i, j int) {
 	k[i], k[j] = k[j], k[i]
 }
 
