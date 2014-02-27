@@ -4,6 +4,7 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"strings"
 )
@@ -16,6 +17,9 @@ type SSLConfig func() (cert interface{}, key interface{})
 
 // simple generic platform, with gzip handling
 func RunWeb(handler http.Handler, port int, ssl SSLConfig, auth Authenticator) error {
+	if err := mime.AddExtensionType(".ttf", "application/x-font-ttf"); err != nil {
+		return err
+	}
 	s := &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
 		Handler: makeGzipHandler(makeAuthHandler(handler, auth)),
