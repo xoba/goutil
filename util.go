@@ -383,3 +383,75 @@ func Check(e error) {
 		panic(e)
 	}
 }
+
+// ----------------------------------------
+
+type Filter interface {
+	Update(t time.Time, x float64) float64
+}
+
+func NewLowPass(tc time.Duration) Filter {
+	return &LowPass{
+		tc:    tc,
+		first: true,
+	}
+}
+
+type LowPass struct {
+	first bool
+	tc    time.Duration
+
+	lastTime time.Time
+
+	lastOut      float64
+	currentValue float64
+}
+
+func (f *LowPass) Update(t time.Time, x float64) float64 {
+	if f.first {
+		f.currentValue = 0
+		f.first = false
+	} else {
+		dt := t.Sub(f.lastTime)
+		if dt > 0 {
+			tc0 := float64(f.tc) / float64(dt)
+			a := 1.0 / (tc0 + 1)
+			f.currentValue = a*x + (1-a)*f.lastOut
+		}
+	}
+	f.lastOut = f.currentValue
+	f.lastTime = t
+	return f.currentValue
+}
+
+type RateEstimator struct {
+	lpf   Filter
+	last  time.Time
+	count int
+	rate  float64
+}
+
+func NewRateEstimator(tc time.Duration) *RateEstimator {
+	return &RateEstimator{
+		lpf: NewLowPass(tc),
+	}
+}
+
+func (re *RateEstimator) Count() int {
+	return re.count
+}
+func (re *RateEstimator) Rate() float64 {
+	return re.rate
+}
+
+// updates and return Rate()
+func (re *RateEstimator) Update() float64 {
+	re.count++
+	now := time.Now()
+	if !re.last.IsZero() {
+		r := 1.0 / now.Sub(re.last).Seconds()
+		re.rate = re.lpf.Update(now, r)
+	}
+	re.last = now
+	return re.rate
+}
