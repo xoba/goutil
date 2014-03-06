@@ -137,7 +137,9 @@ func SummarizeFlags(fs *flag.FlagSet) {
 func Run(b *Build) {
 
 	if b == nil {
-		b = &Build{}
+		b = &Build{
+			Version: "1.0",
+		}
 	}
 
 	var version, all, djson bool
@@ -229,7 +231,7 @@ func Run(b *Build) {
 				fmt.Println(string(buf))
 			}
 		} else {
-			fmt.Printf("v.%s: nothing to run, see options; -help shows more:\n\n", b.Version)
+			fmt.Printf("v%s: nothing to run, see options; -help shows more:\n\n", b.Version)
 			fmt.Println(FormatTextTable(false, " ", cols, rows))
 		}
 
