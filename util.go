@@ -2,7 +2,9 @@
 package goutil
 
 import (
+	"archive/zip"
 	"bytes"
+	"code.google.com/p/go-uuid/uuid"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -454,4 +456,36 @@ func (re *RateEstimator) Update() float64 {
 	}
 	re.last = now
 	return re.rate
+}
+
+func LoadZipData(path, url string) (*zip.Reader, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		tmp := uuid.New() + ".zip"
+		defer os.Remove(tmp)
+		resp, err := http.Get(url)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		f, err := os.Create(tmp)
+		if err != nil {
+			return nil, err
+		}
+		defer f.Close()
+		if _, err := io.Copy(f, resp.Body); err != nil {
+			return nil, err
+		}
+		err = os.Rename(tmp, path)
+		if err != nil {
+			return nil, err
+		}
+		return LoadZipData(path, url)
+	} else {
+		fi, err := f.Stat()
+		if err != nil {
+			return nil, err
+		}
+		return zip.NewReader(f, fi.Size())
+	}
 }
