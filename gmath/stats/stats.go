@@ -77,6 +77,7 @@ func SquareSum(list []float64) float64 {
 	var out float64
 	for _, x := range list {
 		out += x + x
+
 	}
 	return out
 }

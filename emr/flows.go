@@ -180,6 +180,19 @@ func (f *FlowsResponse) GetStep(name string) *StepMember {
 	return nil
 }
 
+func (f *StepMember) ExtractVars() map[string]string {
+	out := make(map[string]string)
+	for i, x := range f.Args {
+		if x == "-cmdenv" {
+			parts := strings.Split(f.Args[i+1], "=")
+			if strings.HasPrefix(parts[0], VARS_PREFIX) {
+				out[parts[0][len(VARS_PREFIX):]] = parts[1]
+			}
+		}
+	}
+	return out
+}
+
 func LoadLines(ss3 s3.Interface, output *StepLocation, f func(string, *KeyValue)) {
 	decider := func(string) bool {
 		return true
