@@ -3,12 +3,10 @@ package forever
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/exec"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -16,7 +14,7 @@ const SELF_LINK = "/proc/self/exe"
 const MIN = time.Second
 
 // args are the name of tool to run forever, followed by its args
-func Run(args []string) {
+func Run(args []string, f func(error)) {
 	path, err := os.Readlink(SELF_LINK)
 	if err != nil {
 		panic(err)
@@ -24,9 +22,9 @@ func Run(args []string) {
 	log.Printf("%s %v # running forever...\n", path, quote(args))
 	for {
 		start := time.Now()
-		reason, err := try(path, args)
-		if err != nil {
-			log.Printf("got error: %q; %v\n", reason, err)
+		if err := try(path, args); err != nil {
+			f(err)
+			log.Printf("got error: %v\n", err)
 		}
 		end := time.Now()
 		if end.Sub(start) < MIN {
@@ -35,55 +33,11 @@ func Run(args []string) {
 	}
 }
 
-func try(path string, args []string) (string, error) {
-
-	wg := new(sync.WaitGroup)
-
+func try(path string, args []string) error {
 	cmd := exec.Command(path, args...)
-
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return "stdout", err
-	}
-
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return "stderr", err
-	}
-
-	err = cmd.Start()
-	if err != nil {
-		return "start", err
-	}
-
-	errs := make([]error, 2)
-
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		defer stderr.Close()
-		_, errs[0] = io.Copy(os.Stderr, stderr)
-	}()
-	go func() {
-		defer wg.Done()
-		defer stdout.Close()
-		_, errs[1] = io.Copy(os.Stdout, stdout)
-	}()
-
-	err = cmd.Wait()
-	if err != nil {
-		return "wait", err
-	}
-
-	wg.Wait()
-
-	for i, e := range errs {
-		if e != nil {
-			return fmt.Sprintf("err%d", i), e
-		}
-	}
-
-	return "", nil
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 type Test struct {
