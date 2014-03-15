@@ -489,3 +489,21 @@ func LoadZipData(path, url string) (*zip.Reader, error) {
 		return zip.NewReader(f, fi.Size())
 	}
 }
+
+// runs f and returns output or timeout with error (i.e., it's ok to call like "_,err := Timeout(...)" if you don't care which)
+func Timeout(f func() error, t time.Duration) (timedout bool, err error) {
+	done := make(chan error, 1)
+	go func() {
+		var err error
+		defer func() {
+			done <- err
+		}()
+		err = f()
+	}()
+	select {
+	case <-time.After(t):
+		return true, fmt.Errorf("timed out after %v", t)
+	case err := <-done:
+		return false, err
+	}
+}
