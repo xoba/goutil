@@ -18,14 +18,15 @@ import (
 	"time"
 )
 
+type FlowListener func(id, state string)
+
 type MonFlow struct {
 	Auth map[string]aws.Auth
+	FlowListener
 }
 
-func NewMonFlow(a aws.Auth) *MonFlow {
-	m := make(map[string]aws.Auth)
-	m["default"] = a
-	return &MonFlow{m}
+func NewMonFlow(a map[string]aws.Auth, l FlowListener) *MonFlow {
+	return &MonFlow{a, l}
 }
 
 func (m *MonFlow) Name() string {
@@ -36,6 +37,7 @@ func (m *MonFlow) Run(args []string) {
 	flow, a := getFlowAndAuth(args, m.Auth)
 	for {
 		r := FetchFlow(a, flow)
+		m.FlowListener(flow, r.State)
 		switch r.State {
 		case "STARTING":
 			fmt.Println("starting")
@@ -48,7 +50,7 @@ func (m *MonFlow) Run(args []string) {
 		default:
 			fmt.Printf("default: %s\n", r.State)
 		}
-		time.Sleep(10 * time.Second)
+		time.Sleep(30 * time.Second)
 	}
 }
 
