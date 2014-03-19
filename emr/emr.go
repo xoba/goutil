@@ -260,7 +260,7 @@ type Step struct {
 	IndirectMapJob bool `json:",omitempty"`
 }
 
-func Run(flow Flow) {
+func Run(flow Flow) (*RunFlowResponse, error) {
 
 	validate(flow)
 
@@ -418,8 +418,23 @@ func Run(flow Flow) {
 
 	u := createSignedURL(flow.Auth, v)
 
-	fmt.Print(string(runReq(u)))
+	resp, err := runReq(u)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEmrResponse(resp)
+}
 
+func runReq(u string) (io.ReadCloser, error) {
+	resp, err := http.Get(u)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != 200 {
+		resp.Body.Close()
+		return nil, fmt.Errorf("bad response: %s", resp.Status)
+	}
+	return resp.Body, nil
 }
 
 const VARS_PREFIX = "EMR_VARS_"
@@ -535,27 +550,8 @@ func encode(v url.Values) string {
 	return e
 }
 
-func runReq(u string) []byte {
-	resp, err := http.Get(u)
-	check(err)
-	defer resp.Body.Close()
-
-	if resp.Status != "200 OK" {
-		fmt.Printf("status: %s\n", resp.Status)
-		fmt.Printf("header: %v\n", resp.Header)
-	}
-
-	var buf bytes.Buffer
-	io.Copy(&buf, resp.Body)
-	return buf.Bytes()
-}
-
-const (
-	ISO = "2006-01-02T15:04:05"
-)
-
 func iso(t time.Time) string {
-	return t.UTC().Format(ISO)
+	return t.UTC().Format("2006-01-02T15:04:05")
 }
 
 func ghmac(key, data string) string {

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"github.com/xoba/goutil/aws"
 	"github.com/xoba/goutil/aws/s3"
+	"io"
 	"log"
 	"math/rand"
 	"net/url"
@@ -108,20 +109,31 @@ func (m *ShowFlow) Run(args []string) {
 
 }
 
+type RunFlowResponse struct {
+	FlowId string `xml:"RunJobFlowResult>JobFlowId"`
+}
+
+func ParseEmrResponse(r io.Reader) (*RunFlowResponse, error) {
+	var x RunFlowResponse
+	d := xml.NewDecoder(r)
+	err := d.Decode(&x)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println(x, err)
+	return &x, nil
+}
+
 func FetchFlow(a aws.Auth, flow string) *FlowsResponse {
 	v := make(url.Values)
-
 	v.Set("Action", "DescribeJobFlows")
 	v.Set("JobFlowIds.member.1", flow)
-
 	u := createSignedURL(a, v)
-
-	res := runReq(u)
-
+	resp, err := runReq(u)
+	check(err)
+	d := xml.NewDecoder(resp)
 	var r FlowsResponse
-
-	xml.Unmarshal(res, &r)
-
+	check(d.Decode(&r))
 	return &r
 }
 

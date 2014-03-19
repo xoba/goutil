@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	VERSION = "1.0"
+	Version = "1.0"
 )
 
 // generic platform init, taking full advantage of all cpu's
@@ -506,4 +506,16 @@ func Timeout(f func() error, t time.Duration) (timedout bool, err error) {
 	case err := <-done:
 		return false, err
 	}
+}
+
+const IsoFormat = "2006-01-02T15:04:05.000Z"
+
+// formats a time as iso 8601 with IsoFormat
+func FormatIsoUtc(t time.Time) string {
+	return t.UTC().Format(IsoFormat)
+}
+
+// parses a time as iso 8601 with IsoFormat
+func ParseIsoUtc(t string) (time.Time, error) {
+	return time.ParseInLocation(IsoFormat, t, time.UTC)
 }
