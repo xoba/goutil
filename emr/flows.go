@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"github.com/xoba/goutil/aws"
 	"github.com/xoba/goutil/aws/s3"
+	"log"
 	"math/rand"
 	"net/url"
 	"os/exec"
@@ -37,18 +38,10 @@ func (m *MonFlow) Run(args []string) {
 	flow, a := getFlowAndAuth(args, m.Auth)
 	for {
 		r := FetchFlow(a, flow)
+		log.Printf("state of %s = %q\n", flow, r.State)
 		m.FlowListener(flow, r.State)
-		switch r.State {
-		case "STARTING":
-			fmt.Println("starting")
-		case "RUNNING":
-			fmt.Println("running")
-		case "SHUTTING_DOWN":
-			fmt.Println("shutting down")
-		case "COMPLETED":
-			fmt.Println("completed")
-		default:
-			fmt.Printf("default: %s\n", r.State)
+		if r.State == "COMPLETED" {
+			return
 		}
 		time.Sleep(30 * time.Second)
 	}
