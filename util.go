@@ -342,6 +342,18 @@ func (r TimeList) Swap(i, j int) {
 	r[i], r[j] = r[j], r[i]
 }
 
+type DurationList []time.Duration
+
+func (r DurationList) Len() int {
+	return len(r)
+}
+func (r DurationList) Less(i, j int) bool {
+	return r[i] < r[j]
+}
+func (r DurationList) Swap(i, j int) {
+	r[i], r[j] = r[j], r[i]
+}
+
 // ----------------------------------------
 
 type KeyValueF struct {
