@@ -57,18 +57,18 @@ func (m *Matrix) Copy() *Matrix {
 	return NewMatrixWithElements(m.Rows, m.Cols, c)
 }
 
-func (m *Matrix) index(i, j int) int {
+func (m *Matrix) Index(i, j int) int {
 	return j*m.ColumnStride + i
 }
 
 func (m *Matrix) Set(i, j int, v float64) {
-	m.Elements[m.index(i, j)] = v
+	m.Elements[m.Index(i, j)] = v
 }
 func (m *Matrix) Inc(i, j int, v float64) {
 	m.Elements[m.index(i, j)] += v
 }
 func (m *Matrix) Get(i, j int) float64 {
-	return m.Elements[m.index(i, j)]
+	return m.Elements[m.Index(i, j)]
 }
 
 func (m *Matrix) String() string {
@@ -85,7 +85,7 @@ func (m *Matrix) String() string {
 			out = append(out, "[")
 			var row []string
 			for j := 0; j < m.Cols; j++ {
-				v := m.Elements[m.index(i, j)]
+				v := m.Elements[m.Index(i, j)]
 				row = append(row, fmt.Sprintf("%9.2e", v))
 			}
 			out = append(out, strings.Join(row, ", "))
