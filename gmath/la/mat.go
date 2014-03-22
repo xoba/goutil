@@ -65,7 +65,7 @@ func (m *Matrix) Set(i, j int, v float64) {
 	m.Elements[m.Index(i, j)] = v
 }
 func (m *Matrix) Inc(i, j int, v float64) {
-	m.Elements[m.index(i, j)] += v
+	m.Elements[m.Index(i, j)] += v
 }
 func (m *Matrix) Get(i, j int) float64 {
 	return m.Elements[m.Index(i, j)]
