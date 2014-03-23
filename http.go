@@ -68,7 +68,7 @@ func (f Redirector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func makeAuthHandler(h http.Handler, auth Authenticator) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if auth(w, r) {
+		if auth == nil || auth(w, r) {
 			h.ServeHTTP(w, r)
 		}
 	})
