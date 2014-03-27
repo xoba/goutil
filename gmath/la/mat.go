@@ -74,7 +74,7 @@ func (m *Matrix) Get(i, j int) float64 {
 func (m *Matrix) String() string {
 	var out []string
 	out = append(out, fmt.Sprintf("%d x %d float64 matrix", m.Rows, m.Cols))
-	if m.Rows*m.Cols < 1000 {
+	if m.Rows*m.Cols < 2000 {
 		out = append(out, ":")
 		out = append(out, "\n")
 		out = append(out, "\t[")
