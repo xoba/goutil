@@ -149,7 +149,6 @@ func (j *Json) AsFloat64() (float64, error) {
 	switch t := j.data.(type) {
 	case json.Number:
 		return t.Float64()
-
 	case int:
 		return float64(t), nil
 	case uint:
@@ -177,6 +176,23 @@ func (j *Json) AsFloat64() (float64, error) {
 
 	}
 	return 0, errors.New("can't convert to int")
+}
+
+func (j *Json) Float64Array() ([]float64, error) {
+	a, err := j.AsArray()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]float64, len(a))
+	for i, e := range a {
+		w := WrapJson(e)
+		f, err := w.AsFloat64()
+		if err != nil {
+			return nil, err
+		}
+		out[i] = f
+	}
+	return out, nil
 }
 
 func (j *Json) AsString() (string, error) {
