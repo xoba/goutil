@@ -22,7 +22,7 @@ func RunWeb(handler http.Handler, port int, ssl SSLConfig, auth Authenticator) e
 	}
 	s := &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
-		Handler: makeGzipHandler(makeAuthHandler(handler, auth)),
+		Handler: makeAuthHandler(handler, auth),
 	}
 	cert, key := ssl()
 	if cert == nil {
