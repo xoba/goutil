@@ -39,6 +39,7 @@ func RunWeb(handler http.Handler, port int, ssl SSLConfig, auth Authenticator) e
 	}
 }
 
+// if returned string is length zero, don't use
 type RedirectorFunc func(r *http.Request) string
 
 // redirects http to https; rf can be nil
@@ -57,13 +58,16 @@ type Redirector struct {
 func (f Redirector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	if f.Transformer != nil {
-		http.Redirect(w, r, f.Transformer(r), 307)
-	} else {
-		u := r.URL
-		u.Host = r.Host
-		u.Scheme = "https"
-		http.Redirect(w, r, u.String(), 307)
+		u := f.Transformer(r)
+		if len(u) > 0 {
+			http.Redirect(w, r, u, 307)
+			return
+		}
 	}
+	u := r.URL
+	u.Host = r.Host
+	u.Scheme = "https"
+	http.Redirect(w, r, u.String(), 307)
 }
 
 func makeAuthHandler(h http.Handler, auth Authenticator) http.Handler {
