@@ -7,8 +7,6 @@ import (
 	"encoding/xml"
 	"flag"
 	"fmt"
-	"github.com/xoba/goutil/aws"
-	"github.com/xoba/goutil/aws/s3"
 	"io"
 	"log"
 	"math/rand"
@@ -18,6 +16,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/xoba/goutil/aws"
+	"github.com/xoba/goutil/aws/s3"
 )
 
 type FlowListener func(id, state string)

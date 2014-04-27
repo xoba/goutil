@@ -5,14 +5,15 @@ logging for the purposes of analysis later on.
 package log
 
 import (
-	"code.google.com/p/go-uuid/uuid"
 	"encoding/json"
 	"fmt"
+	"os"
+	"time"
+
+	"code.google.com/p/go-uuid/uuid"
 	"github.com/xoba/goutil"
 	"github.com/xoba/goutil/aws"
 	"github.com/xoba/goutil/aws/s3"
-	"os"
-	"time"
 )
 
 type Logger interface {

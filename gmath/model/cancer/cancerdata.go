@@ -2,10 +2,11 @@ package cancer
 
 import (
 	"bufio"
-	"github.com/xoba/goutil/gmath/la"
-	"github.com/xoba/goutil/gmath/model"
 	"strconv"
 	"strings"
+
+	"github.com/xoba/goutil/gmath/la"
+	"github.com/xoba/goutil/gmath/model"
 )
 
 /*

@@ -2,16 +2,17 @@
 package cancer
 
 import (
-	"code.google.com/p/go-uuid/uuid"
 	"fmt"
-	"github.com/xoba/goutil/gmath"
-	"github.com/xoba/goutil/gmath/model"
 	"io/ioutil"
 	"math"
 	"os"
 	"os/exec"
 	"strings"
 	"time"
+
+	"code.google.com/p/go-uuid/uuid"
+	"github.com/xoba/goutil/gmath"
+	"github.com/xoba/goutil/gmath/model"
 )
 
 type Tool struct {

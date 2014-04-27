@@ -4,7 +4,6 @@ package emr
 import (
 	"bufio"
 	"bytes"
-	"code.google.com/p/go-uuid/uuid"
 	"compress/bzip2"
 	"compress/gzip"
 	"crypto/hmac"
@@ -14,9 +13,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/xoba/goutil/aws"
-	"github.com/xoba/goutil/aws/s3"
-	"github.com/xoba/goutil/tool"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -29,6 +25,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"code.google.com/p/go-uuid/uuid"
+	"github.com/xoba/goutil/aws"
+	"github.com/xoba/goutil/aws/s3"
+	"github.com/xoba/goutil/tool"
 )
 
 type Mapper func(ctx MapContext)

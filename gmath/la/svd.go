@@ -2,6 +2,7 @@ package la
 
 import (
 	"fmt"
+
 	"github.com/xoba/goutil/gmath/lapack"
 )
 

@@ -4,7 +4,6 @@ package goutil
 
 import (
 	"bufio"
-	"code.google.com/p/go-uuid/uuid"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -12,6 +11,8 @@ import (
 	"os"
 	"syscall"
 	"time"
+
+	"code.google.com/p/go-uuid/uuid"
 )
 
 var gcbh chan interface{} = make(chan interface{})

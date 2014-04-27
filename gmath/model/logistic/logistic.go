@@ -3,9 +3,10 @@ package logistic
 
 import (
 	"fmt"
+	"math/rand"
+
 	"github.com/xoba/goutil/gmath/la"
 	"github.com/xoba/goutil/gmath/model"
-	"math/rand"
 )
 
 type Tool struct {

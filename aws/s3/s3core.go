@@ -9,7 +9,6 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
-	"github.com/xoba/goutil/aws"
 	"io"
 	"mime"
 	"net/http"
@@ -19,6 +18,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/xoba/goutil/aws"
 )
 
 const (

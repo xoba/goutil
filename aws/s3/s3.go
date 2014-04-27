@@ -4,11 +4,12 @@ package s3
 import (
 	"errors"
 	"fmt"
-	"github.com/xoba/goutil"
-	"github.com/xoba/goutil/aws"
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/xoba/goutil"
+	"github.com/xoba/goutil/aws"
 )
 
 type Interface interface {

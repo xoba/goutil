@@ -6,11 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/xoba/goutil"
-	"github.com/xoba/goutil/aws"
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/xoba/goutil"
+	"github.com/xoba/goutil/aws"
 )
 
 type DynamoDB struct {

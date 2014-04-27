@@ -4,7 +4,6 @@ package goutil
 import (
 	"archive/zip"
 	"bytes"
-	"code.google.com/p/go-uuid/uuid"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -16,6 +15,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"code.google.com/p/go-uuid/uuid"
 )
 
 const (

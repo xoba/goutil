@@ -11,11 +11,12 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
+	"math"
+	"math/rand"
+
 	"github.com/xoba/goutil/gmath"
 	"github.com/xoba/goutil/gmath/la"
 	"github.com/xoba/goutil/gmath/stats"
-	"math"
-	"math/rand"
 )
 
 func (f *ObservationAssignments) isRowTraining(i int) int {

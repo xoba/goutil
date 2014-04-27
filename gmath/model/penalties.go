@@ -1,8 +1,9 @@
 package model
 
 import (
-	"github.com/xoba/goutil/gmath/blas"
 	"math"
+
+	"github.com/xoba/goutil/gmath/blas"
 )
 
 type lassoPenalty struct {

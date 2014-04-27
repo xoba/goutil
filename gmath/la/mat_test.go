@@ -1,10 +1,11 @@
 package la
 
 import (
-	"github.com/xoba/goutil/gmath/blas"
 	"math"
 	"math/rand"
 	"testing"
+
+	"github.com/xoba/goutil/gmath/blas"
 )
 
 func TestDGemv1(t *testing.T) {

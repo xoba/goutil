@@ -3,8 +3,9 @@ package la
 
 import (
 	"fmt"
-	"github.com/xoba/goutil/gmath/blas"
 	"strings"
+
+	"github.com/xoba/goutil/gmath/blas"
 )
 
 // vector
