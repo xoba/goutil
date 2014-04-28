@@ -238,7 +238,7 @@ func (s SmartS3) Put(req PutRequest) error {
 func (s SmartS3) PutObject(req PutObjectRequest) error {
 	return s.Put(PutRequest{
 		BasePut:    req.BasePut,
-		ReaderFact: goutil.BufferReaderFact{req.Data},
+		ReaderFact: goutil.BufferReaderFact{Buffer: req.Data},
 	})
 }
 

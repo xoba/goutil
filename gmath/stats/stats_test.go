@@ -73,7 +73,7 @@ func TestPercentile5(t *testing.T) {
 	for i := 0; i <= 100; i++ {
 		p := Percentile(true, list, 0.50)
 		if p < last {
-			t.Error("decreasing percentile value: %f --> %f", last, p)
+			t.Errorf("decreasing percentile value: %f --> %f", last, p)
 		}
 		last = p
 	}
