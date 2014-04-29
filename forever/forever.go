@@ -10,16 +10,13 @@ import (
 	"time"
 )
 
-const SELF_LINK = "/proc/self/exe"
-const MIN = time.Second
-
 // args are the name of tool to run forever, followed by its args
-func Run(args []string, f func(error)) {
-	path, err := os.Readlink(SELF_LINK)
+func Run(args []string, delay time.Duration, f func(error)) {
+	path, err := os.Readlink("/proc/self/exe")
 	if err != nil {
 		panic(err)
 	}
-	log.Printf("%s %v # running forever...\n", path, quote(args))
+	log.Printf("\"%s %s\"\n", path, strings.Join(args, " "))
 	for {
 		start := time.Now()
 		if err := try(path, args); err != nil {
@@ -27,17 +24,23 @@ func Run(args []string, f func(error)) {
 			log.Printf("got error: %v\n", err)
 		}
 		end := time.Now()
-		if end.Sub(start) < MIN {
-			time.Sleep(MIN)
+		if end.Sub(start) < delay {
+			time.Sleep(delay)
 		}
 	}
 }
 
-func try(path string, args []string) error {
+func try(path string, args []string) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("oops, recovered running %s: %v", path, r)
+		}
+	}()
 	cmd := exec.Command(path, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	err = cmd.Run()
+	return err
 }
 
 type Test struct {
@@ -48,10 +51,8 @@ func (Test) Name() string {
 }
 
 func (Test) Run(args []string) {
-
 	fmt.Fprintln(os.Stdout, "writing to stdout")
 	fmt.Fprintln(os.Stderr, "writing to stderr")
-
 	if true {
 		done := make(chan bool)
 		go func() {
@@ -62,12 +63,4 @@ func (Test) Run(args []string) {
 		<-done
 	}
 
-}
-
-func quote(a []string) string {
-	var out []string
-	for _, s := range a {
-		out = append(out, fmt.Sprintf("%q", s))
-	}
-	return strings.Join(out, " ")
 }
