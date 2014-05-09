@@ -60,14 +60,14 @@ func (f Redirector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if f.Transformer != nil {
 		u := f.Transformer(r)
 		if len(u) > 0 {
-			http.Redirect(w, r, u, 307)
+			http.Redirect(w, r, u, http.StatusTemporaryRedirect)
 			return
 		}
 	}
 	u := r.URL
 	u.Host = r.Host
 	u.Scheme = "https"
-	http.Redirect(w, r, u.String(), 307)
+	http.Redirect(w, r, u.String(), http.StatusTemporaryRedirect)
 }
 
 func makeAuthHandler(h http.Handler, auth Authenticator) http.Handler {
