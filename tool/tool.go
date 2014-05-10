@@ -2,38 +2,12 @@
 package tool
 
 import (
-	"bufio"
-	"bytes"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
-	"path"
-	"path/filepath"
-	"reflect"
-	"runtime"
 	"sort"
 	"strings"
-	"time"
 )
-
-type Build struct {
-	Version string    `json:",omitempty"`
-	Commit  string    `json:",omitempty"` // i.e., the git commit
-	Url     string    `json:",omitempty"`
-	BuildId string    `json:",omitempty"`
-	Status  string    `json:",omitempty"`
-	Clean   bool      `json:",omitempty"` // whether or not we're completely sync'd with version control
-	Built   time.Time `json:",omitempty"`
-}
-
-const (
-	BUILT_FORMAT = "2006-01-02T15:04:05Z"
-)
-
-func (b Build) FormatBuilt() string {
-	return b.Built.Format(BUILT_FORMAT)
-}
 
 type Interface interface {
 	Name() string
@@ -42,18 +16,6 @@ type Interface interface {
 
 type HasDescription interface {
 	Description() string
-}
-
-type HasTags interface {
-	Tags() []string
-}
-
-func Tags(i Interface) (out []string) {
-	e, ok := i.(HasTags)
-	if ok {
-		out = append(out, e.Tags()...)
-	}
-	return
 }
 
 func Name(i Interface) string {
@@ -134,133 +96,30 @@ func SummarizeFlags(fs *flag.FlagSet) {
 	})
 }
 
-func Run(b *Build) {
-
-	if b == nil {
-		b = &Build{
-			Version: "1.0",
-		}
-	}
-
-	var version, all, djson bool
-	var pathUrl, prefix string
-
-	flag.BoolVar(&version, "version", false, "detailed version information")
-	flag.BoolVar(&djson, "json", false, "show tools in json")
-	flag.BoolVar(&all, "all", false, "shows all tools, irrespective of prefix")
-	flag.StringVar(&pathUrl, "pathurl", "", "adds path onto build url")
-	flag.StringVar(&prefix, "prefix", "", "command name prefix to list")
-	flag.Parse()
-
-	switch {
-
-	case len(pathUrl) > 0:
-		p := path.Clean("/" + pathUrl)
-		fmt.Printf("%s%s\n", b.Url, p)
-
-	case len(os.Args) < 2 || djson || all || len(prefix) > 0:
-
-		toplevel := make(map[string]bool)
-
+func Run() {
+	if len(os.Args) < 2 {
+		var width int
 		var names []string
 		for k := range tools {
+			if len(k) > width {
+				width = len(k)
+			}
 			names = append(names, k)
 		}
-
 		sort.Strings(names)
-
-		var hasTags bool
-		var rows []map[string]string
-
-		for _, k := range names {
-
-			v := tools[k]
-
-			row := make(map[string]string)
-
-			row["command"] = filepath.Base(os.Args[0]) + " " + k
-			row["description"] = Description(v)
-
-			row["code"] = fmt.Sprintf("%v", reflect.TypeOf(v))
-
-			tags := Tags(v)
-			if len(tags) > 0 {
-				sort.Strings(tags)
-				row["tags"] = strings.Join(tags, ", ")
-			}
-
-			include := false
-
-			switch {
-
-			case all:
-				include = true
-			case len(prefix) > 0:
-				include = strings.HasPrefix(Name(v), prefix)
-			default:
-				parts := strings.Split(Name(v), ".")
-				root := parts[0]
-				include = !toplevel[root] || len(parts) == 1
-			}
-
-			if include {
-				parts := strings.Split(Name(v), ".")
-				root := parts[0]
-				toplevel[Name(v)] = true
-				toplevel[root] = true
-				rows = append(rows, row)
-				if len(tags) > 0 {
-					hasTags = true
-				}
-			}
-
+		f := fmt.Sprintf("%%%ds: %%s\n", width)
+		for _, n := range names {
+			fmt.Printf(f, n, Description(tools[n]))
 		}
-
-		cols := strings.Split("command,description,code", ",")
-
-		if hasTags {
-			cols = append(cols, "tags")
-		}
-
-		if djson {
-			m := []interface{}{
-				b,
-				rows,
-			}
-			if buf, err := json.MarshalIndent(m, "", "  "); err == nil {
-				fmt.Println(string(buf))
-			}
-		} else {
-			fmt.Printf("v%s: nothing to run, see options; -help shows more:\n\n", b.Version)
-			fmt.Println(FormatTextTable(false, " ", cols, rows))
-		}
-
-	default:
-
-		if version {
-
-			p := KeyValuePrinter{values: make(map[string]string)}
-
-			p.Line("version", fmt.Sprintf("%s / go %s", b.Version, runtime.Version()))
-			p.Line("commit", b.Commit)
-			p.Line("url", b.Url)
-			p.Line("build id", b.BuildId)
-			p.Line("built", fmt.Sprintf("%s (%v ago)", b.Built.Format("2006-01-02T15:04:05Z"), time.Now().Sub(b.Built)))
-			p.Line("status", b.Status)
-
-			p.Print()
-
-		} else {
-			name := os.Args[1]
-			t, ok := tools[name]
-			if !ok {
-				fmt.Fprintf(os.Stderr, "no such tool: %s\n", name)
-				os.Exit(1)
-			}
-
-			t.Run(os.Args[2:])
-		}
+		return
 	}
+	name := os.Args[1]
+	t, ok := tools[name]
+	if !ok {
+		fmt.Fprintf(os.Stderr, "no such tool: %q\n", name)
+		os.Exit(1)
+	}
+	t.Run(os.Args[2:])
 }
 
 type KeyValuePrinter struct {
@@ -319,52 +178,4 @@ func Names() (out []string) {
 // gets the tool with given name
 func ForName(name string) Interface {
 	return tools[name]
-}
-
-func NewSequence(name, desc string, tools ...Interface) *Sequence {
-	return &Sequence{name: name, desc: desc, tools: tools}
-}
-
-type Sequence struct {
-	name, desc string
-	tools      []Interface
-}
-
-func (st *Sequence) Tags() (out []string) {
-	m := make(map[string]bool)
-	for _, x := range st.tools {
-		for _, y := range Tags(x) {
-			m[y] = true
-		}
-	}
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return []string{}
-}
-func (st *Sequence) Name() string {
-	return st.name
-}
-func (st *Sequence) Description() string {
-	var buf bytes.Buffer
-	b := bufio.NewWriter(&buf)
-	b.WriteString(st.desc)
-
-	b.WriteString(" (seq: ")
-	var out []string
-	for _, x := range st.tools {
-		out = append(out, Name(x))
-	}
-	b.WriteString(strings.Join(out, ", "))
-	b.WriteString(")")
-
-	b.Flush()
-	return string(buf.Bytes())
-}
-func (st *Sequence) Run(args []string) {
-	for _, x := range st.tools {
-		fmt.Printf("running %s...\n", Name(x))
-		x.Run(args)
-	}
 }
