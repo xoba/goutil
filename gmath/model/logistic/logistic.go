@@ -69,7 +69,7 @@ func (*Tool) Run(args []string) {
 
 	tt := oa.Assign()
 
-	results := model.RunGpsFull(rp, tt, dv, rc, pc, mon)
+	results := model.RunGpsFull(rp, tt, dv, rc, pc, mon.Continue)
 
 	fmt.Println(results)
 
@@ -79,7 +79,7 @@ type FixedVMonitor struct {
 	Max float64
 }
 
-func (x *FixedVMonitor) Continue(v float64, jstar int, m []float64, i, o float64) bool {
+func (x *FixedVMonitor) Continue(v float64, jstar int, m []float64, i, o float64, cn []model.Normalization, rn model.Normalization) bool {
 	fmt.Printf("%f\t%d\t%f\t%f\n", v, jstar, i, o)
 	return v < x.Max
 }
