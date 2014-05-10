@@ -48,7 +48,7 @@ func NewToken(validity time.Duration, message, password string) (string, error) 
 }
 
 // returns whether or not token is valid, and decoded token
-func Decode(tok, password string) (bool, *Token, error) {
+func DecodeToken(tok, password string) (bool, *Token, error) {
 	b := base64.NewDecoder(base64.URLEncoding, strings.NewReader(tok))
 	gz, err := gzip.NewReader(b)
 	if err != nil {
