@@ -2,5 +2,5 @@ package log
 
 import "testing"
 
-func BogusTest(t *testing.T) {
+func TestBogus(t *testing.T) {
 }

@@ -2,5 +2,5 @@ package aws
 
 import "testing"
 
-func BogusTest(t *testing.T) {
+func TestBogus(t *testing.T) {
 }
