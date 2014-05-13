@@ -22,7 +22,7 @@ type Token struct {
 	Message string    `json:"P,omitempty"`
 }
 
-func NewToken(validity time.Duration, message, password string) (string, error) {
+func NewToken(validity time.Duration, message, password string) string {
 	buf := new(bytes.Buffer)
 	e1 := base64.NewEncoder(base64.URLEncoding, buf)
 	e2 := gzip.NewWriter(e1)
@@ -39,12 +39,9 @@ func NewToken(validity time.Duration, message, password string) (string, error) 
 		To:      to,
 		Message: message,
 	}
-	err := e3.Encode(m)
-	if err != nil {
-		return "", err
-	}
+	e3.Encode(m)
 	e2.Close()
-	return buf.String(), nil
+	return buf.String()
 }
 
 // returns whether or not token is valid, and decoded token
