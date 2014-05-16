@@ -104,7 +104,7 @@ func Run() {
 		}
 		sort.Strings(names)
 		for _, n := range names {
-			fmt.Printf("%s %s \t\t# %s\n", os.Args[0], n, Description(tools[n]))
+			fmt.Printf("%s %s        # %s\n", os.Args[0], n, Description(tools[n]))
 		}
 		return
 	}
