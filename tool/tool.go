@@ -98,18 +98,13 @@ func SummarizeFlags(fs *flag.FlagSet) {
 
 func Run() {
 	if len(os.Args) < 2 {
-		var width int
 		var names []string
 		for k := range tools {
-			if len(k) > width {
-				width = len(k)
-			}
 			names = append(names, k)
 		}
 		sort.Strings(names)
-		f := fmt.Sprintf("%%%ds: %%s\n", width)
 		for _, n := range names {
-			fmt.Printf(f, n, Description(tools[n]))
+			fmt.Printf("%s %s\t\t# %s\n", os.Args[0], n, Description(tools[n]))
 		}
 		return
 	}
