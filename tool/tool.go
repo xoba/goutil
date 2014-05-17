@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path"
 	"sort"
 	"strings"
 )
@@ -104,7 +105,7 @@ func Run() {
 		}
 		sort.Strings(names)
 		for _, n := range names {
-			fmt.Printf("%s %s        # %s\n", os.Args[0], n, Description(tools[n]))
+			fmt.Printf("%s %s        # %s\n", path.Base(os.Args[0]), n, Description(tools[n]))
 		}
 		return
 	}
