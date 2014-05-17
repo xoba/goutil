@@ -2,6 +2,7 @@
 package tool
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"os"
@@ -99,13 +100,24 @@ func SummarizeFlags(fs *flag.FlagSet) {
 
 func Run() {
 	if len(os.Args) < 2 {
+		var max int
 		var names []string
 		for k := range tools {
+			if len(k) > max {
+				max = len(k)
+			}
 			names = append(names, k)
 		}
 		sort.Strings(names)
+		spaces := func(n int) string {
+			buf := new(bytes.Buffer)
+			for i := 0; i < n; i++ {
+				buf.WriteRune(' ')
+			}
+			return buf.String()
+		}
 		for _, n := range names {
-			fmt.Printf("%s %s        # %s\n", path.Base(os.Args[0]), n, Description(tools[n]))
+			fmt.Printf("%s %s %s # %s\n", path.Base(os.Args[0]), n, spaces(max-len(n)), Description(tools[n]))
 		}
 		return
 	}
