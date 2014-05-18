@@ -31,9 +31,9 @@ type HasName interface {
 }
 
 func Name(i Interface) string {
-	parts := strings.Split(fullname(i), ",")
-	if len(parts) > 1 {
-		return strings.TrimSpace(parts[0])
+	name, _ := splitOnFirstComma(fullname(i))
+	if len(name) > 0 {
+		return name
 	} else {
 		return fullname(i)
 	}
@@ -41,17 +41,25 @@ func Name(i Interface) string {
 
 func fullname(i Interface) string {
 	if n, ok := i.(HasName); ok {
-		return n.Name()
+		return strings.TrimSpace(n.Name())
 	} else {
-		return fmt.Sprintf("%v", i)
+		return strings.TrimSpace(fmt.Sprintf("%v", i))
+	}
+}
+
+func splitOnFirstComma(line string) (string, string) {
+	if parts := strings.SplitN(line, ",", 2); len(parts) == 1 {
+		return strings.TrimSpace(line), ""
+	} else {
+		return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
 	}
 }
 
 func Description(i Interface) string {
 	if e, ok := i.(HasDescription); ok {
 		return e.Description()
-	} else if parts := strings.Split(fullname(i), ","); len(parts) > 1 {
-		return strings.TrimSpace(parts[1])
+	} else if _, d := splitOnFirstComma(fullname(i)); len(d) > 1 {
+		return d
 	}
 	return ""
 }
