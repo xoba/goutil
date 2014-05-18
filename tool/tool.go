@@ -3,7 +3,6 @@ package tool
 
 import (
 	"bytes"
-	"flag"
 	"fmt"
 	"os"
 	"path"
@@ -11,40 +10,50 @@ import (
 	"strings"
 )
 
-type Interface interface {
-	Name() string
+type Interface interface{}
+
+type CanRun interface {
 	Run(args []string)
+}
+
+type RunFunc func(args []string)
+
+func (r RunFunc) Run(args []string) {
+	r(args)
 }
 
 type HasDescription interface {
 	Description() string
 }
 
+type HasName interface {
+	Name() string // no dots before optional comma, description after
+}
+
 func Name(i Interface) string {
-	parts := strings.Split(i.Name(), ",")
+	parts := strings.Split(fullname(i), ",")
 	if len(parts) > 1 {
-		return parts[0]
+		return strings.TrimSpace(parts[0])
 	} else {
-		return i.Name()
+		return fullname(i)
+	}
+}
+
+func fullname(i Interface) string {
+	if n, ok := i.(HasName); ok {
+		return n.Name()
+	} else {
+		return fmt.Sprintf("%v", i)
 	}
 }
 
 func Description(i Interface) string {
-	parts := strings.Split(i.Name(), ",")
-	if len(parts) > 1 {
-		return strings.TrimSpace(parts[1])
-	} else {
-		return rawDesc(i)
-	}
-}
-
-func rawDesc(i Interface) string {
-	e, ok := i.(HasDescription)
-	if ok {
+	if e, ok := i.(HasDescription); ok {
 		return e.Description()
-	} else {
-		return ""
+	} else if parts := strings.Split(fullname(i), ","); len(parts) > 1 {
+		return strings.TrimSpace(parts[1])
 	}
+	return ""
 }
 
 func ConditionalRun(msg string, def bool, runTrue, runFalse func()) {
@@ -77,96 +86,98 @@ func ConfirmYorN(msg string, def bool) (bool, error) {
 	return !strings.Contains(resp, "n") && strings.Contains(resp, "y"), nil
 }
 
-func Query(message, def string) (string, error) {
-	fmt.Printf("%s [%s] ", message, def)
-	var resp string
-	_, err := fmt.Scanf("%s", &resp)
-	if err != nil {
-		return "", err
-	}
-	return resp, nil
-}
-
-func SummarizeFlags(fs *flag.FlagSet) {
-	fmt.Println("running with:")
-	fs.VisitAll(func(f *flag.Flag) {
-		fmt.Printf("\t-%s=\"%s\" (%s", f.Name, f.Value.String(), f.Usage)
-		if f.Value.String() != f.DefValue {
-			fmt.Printf(", different than default of \"%s\"", f.DefValue)
-		}
-		fmt.Println(")")
-	})
-}
-
 func Run() {
+
 	if len(os.Args) < 2 {
-		var max int
-		var names []string
-		for k := range tools {
-			if len(k) > max {
-				max = len(k)
-			}
-			names = append(names, k)
-		}
-		sort.Strings(names)
-		spaces := func(n int) string {
-			buf := new(bytes.Buffer)
-			for i := 0; i < n; i++ {
-				buf.WriteRune(' ')
-			}
-			return buf.String()
-		}
-		for _, n := range names {
-			fmt.Printf("%s %s %s # %s\n", path.Base(os.Args[0]), n, spaces(max-len(n)), Description(tools[n]))
-		}
+		ListTools(roots)
 		return
 	}
+
 	name := os.Args[1]
-	t, ok := tools[name]
-	if !ok {
-		fmt.Fprintf(os.Stderr, "no such tool: %q\n", name)
+
+	if children, ok := tree[name]; ok {
+		ListTools(children)
+		return
+	} else {
+		t, ok := tools[name]
+		if !ok {
+			fmt.Fprintf(os.Stderr, "no such tool: %q\n", name)
+			os.Exit(1)
+		}
+		RunInterface(t, os.Args[2:])
+	}
+}
+
+func ToolsForNames(names []string) []Interface {
+	var list []Interface
+	for _, r := range roots {
+		list = append(list, tools[r])
+	}
+	return list
+}
+
+func ListTools(names []string) {
+	var max int
+	for _, name := range names {
+		if len(name) > max {
+			max = len(name)
+		}
+	}
+	sort.Strings(names)
+	spaces := func(n int) string {
+		buf := new(bytes.Buffer)
+		for i := 0; i < n; i++ {
+			buf.WriteRune(' ')
+		}
+		return buf.String()
+	}
+	for _, n := range names {
+		var dir string
+		if c, ok := tree[n]; ok {
+			if len(c) > 1 {
+				dir = fmt.Sprintf("%d subtools", len(c))
+			} else {
+				dir = "one subtool"
+			}
+		}
+		fmt.Printf("%s ", path.Base(os.Args[0]))
+		fmt.Printf("%s %s # ", n, spaces(max-len(n)))
+		if d := Description(tools[n]); len(d) > 0 {
+			fmt.Printf("%s ", d)
+		}
+		if len(dir) > 0 {
+			fmt.Printf("(%s)", dir)
+		}
+		fmt.Println()
+	}
+}
+
+func RunInterface(i Interface, args []string) {
+	if r, ok := i.(CanRun); ok {
+		r.Run(args)
+	} else {
+		fmt.Fprintf(os.Stderr, fmt.Sprintf("oops, can't run %q\n", Name(i)))
 		os.Exit(1)
 	}
-	t.Run(os.Args[2:])
 }
 
-type KeyValuePrinter struct {
-	keys   []string
-	values map[string]string
-}
-
-func (p *KeyValuePrinter) Line(k, v string) {
-	p.keys = append(p.keys, k)
-	p.values[k] = v
-}
-func (p *KeyValuePrinter) Print() {
-	var max int
-	for _, k := range p.keys {
-		if len(k) > max {
-			max = len(k)
-		}
-
-	}
-	for _, k := range p.keys {
-		v := p.values[k]
-		fmt.Printf("%-"+fmt.Sprintf("%d", max+1)+"s ", k+":")
-
-		for i, x := range strings.Split(v, "\n") {
-			if i > 0 {
-				for j := 0; j < max+2; j++ {
-					fmt.Print(" ")
-				}
-			}
-			fmt.Printf("%s\n", x)
-		}
-
-	}
-
-}
-
-var tools map[string]Interface = make(map[string]Interface)
+var (
+	roots []string
+	tools map[string]Interface = make(map[string]Interface)
+	tree  map[string][]string  = make(map[string][]string)
+)
 
 func Register(r Interface) {
+	register(r)
+	roots = append(roots, Name(r))
+}
+
+func RegisterChild(parent string, child Interface) {
+	register(child)
+	tree[parent] = append(tree[parent], Name(child))
+}
+
+func register(r Interface) {
 	name := Name(r)
 	_, ok := tools[name]
 	if ok {
