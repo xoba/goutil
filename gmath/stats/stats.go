@@ -49,6 +49,17 @@ func Sd(list []float64) float64 {
 	return math.Sqrt(Variance(list))
 }
 
+func RSquared(y, f []float64) float64 {
+	n := len(y)
+	mean := Mean(y)
+	var tot, res float64
+	for i := 0; i < n; i++ {
+		tot += math.Pow(y[i]-mean, 2)
+		res += math.Pow(f[i]-y[i], 2)
+	}
+	return 1 - res/tot
+}
+
 func RemoveNaNsAndInfs(list []float64) (cleaned []float64) {
 	for _, x := range list {
 		if !(math.IsNaN(x) || math.IsInf(x, 0)) {
