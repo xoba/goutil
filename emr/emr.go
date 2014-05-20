@@ -270,7 +270,7 @@ func Run(flow Flow) (*RunFlowResponse, error) {
 		flow.SlaveSpotPrice = 0
 	}
 
-	id := fmt.Sprintf("%s-%s_%s_%s", flow.Steps[0].Mapper.Name(), flow.Steps[0].Reducer.Name(), time.Now().UTC().Format("20060102T150405Z"), uuid.New()[:4])
+	id := fmt.Sprintf("%s-%s_%s_%s", tool.Name(flow.Steps[0].Mapper), tool.Name(flow.Steps[0].Reducer), time.Now().UTC().Format("20060102T150405Z"), uuid.New()[:4])
 
 	ss3 := s3.GetDefault(flow.Auth)
 
@@ -630,7 +630,7 @@ func createScript(t tool.Interface, checker ToolChecker, args ...string) string 
 		checker = LapackToolChecker
 	}
 	if err := checker(cmd, t); err != nil {
-		panic(fmt.Sprintf("tool %s doesn't check out: %v", t.Name(), err))
+		panic(fmt.Sprintf("tool %s doesn't check out: %v", tool.Name(t), err))
 	}
 
 	buf, err := ioutil.ReadFile(cmd)
@@ -654,7 +654,7 @@ func createScript(t tool.Interface, checker ToolChecker, args ...string) string 
 	}
 
 	w("#!/bin/bash")
-	w(fmt.Sprintf("CMD=/tmp/`/bin/mktemp -u %s_XXXXXXXXXXXXX`", t.Name()))
+	w(fmt.Sprintf("CMD=/tmp/`/bin/mktemp -u %s_XXXXXXXXXXXXX`", tool.Name(t)))
 	w("/usr/bin/base64 -d <<END_TEXT | /bin/gzip -d > $CMD")
 	w2(split(base64.StdEncoding.EncodeToString(buf)))
 	w("END_TEXT")
@@ -662,7 +662,7 @@ func createScript(t tool.Interface, checker ToolChecker, args ...string) string 
 
 	run := func() string {
 		f := new(bytes.Buffer)
-		fmt.Fprintf(f, "$CMD %s", t.Name())
+		fmt.Fprintf(f, "$CMD %s", tool.Name(t))
 		for _, a := range args {
 			fmt.Fprintf(f, " %s", a)
 		}
