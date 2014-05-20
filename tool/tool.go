@@ -3,6 +3,7 @@ package tool
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"os"
 	"path"
@@ -28,6 +29,11 @@ type HasDescription interface {
 
 type HasName interface {
 	Name() string // no dots before optional comma, description after
+}
+
+func Flags(i Interface) *flag.FlagSet {
+	fs := flag.NewFlagSet(Name(i), flag.ExitOnError)
+	return fs
 }
 
 func Name(i Interface) string {
