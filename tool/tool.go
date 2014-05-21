@@ -181,6 +181,27 @@ var (
 	tree  map[string][]string  = make(map[string][]string)
 )
 
+type wrapper struct {
+	name string
+	Interface
+}
+
+func (w wrapper) Run(args []string) {
+	RunInterface(w.Interface, args)
+}
+
+func (w wrapper) Name() string {
+	if len(w.name) > 0 {
+		return w.name
+	} else {
+		return Name(w)
+	}
+}
+
+func Named(name string, i Interface) Interface {
+	return wrapper{name, i}
+}
+
 func Register(r Interface) {
 	register(r)
 	roots = append(roots, Name(r))
