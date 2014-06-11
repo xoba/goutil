@@ -163,6 +163,12 @@ func (s *stmt) Exec(args []driver.Value) (driver.Result, error) {
 			s.conn.ch.WriteString(s.id)
 			s.conn.ch.WriteInt32(int32(i + 1))
 			s.conn.ch.WriteFloat64(x)
+		case time.Time:
+			s.conn.ch.WriteByte(14)
+			s.conn.ch.WriteString(s.id)
+			s.conn.ch.WriteInt32(int32(i + 1))
+			s.conn.ch.WriteInt64(x.UnixNano() / 1000000)
+
 		default:
 			fmt.Printf("unhandled: %T %v\n", x, x)
 		}
@@ -266,6 +272,7 @@ func (r *rows) Close() error {
 	return nil
 }
 func (r *rows) Next(dest []driver.Value) error {
+
 	r.conn.ch.WriteByte(6)
 	r.conn.ch.WriteString(r.id)
 	b, err := r.conn.ch.ReadByte()

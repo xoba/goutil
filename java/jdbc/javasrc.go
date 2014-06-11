@@ -120,6 +120,14 @@ public class GoJdbc {
 			stmts.get(id).setDouble(a,b);
 			break;
 		    }
+		case 14: // set time
+		    {
+			String id = readString(dataIn);
+			int a = dataIn.readInt();
+			long b = dataIn.readLong();
+			stmts.get(id).setTimestamp(a,new Timestamp(b));
+			break;
+		    }
 		case 5: // execute
 		    {
 			String id = readString(dataIn);
