@@ -120,7 +120,17 @@ public class GoJdbc {
 			stmts.get(id).setDouble(a,b);
 			break;
 		    }
-		case 5: // execute
+		case 14: // set time
+		    {
+			String id = readString(dataIn);
+			int a = dataIn.readInt();
+			long x = dataIn.readLong();
+                        Timestamp t = new Timestamp(x);
+System.err.println(t);
+			stmts.get(id).setTimestamp(a,t);
+			break;
+		    }
+	        case 5: // execute
 		    {
 			String id = readString(dataIn);
 			PreparedStatement s = stmts.get(id);
@@ -222,7 +232,18 @@ public class GoJdbc {
 				dataOut.writeLong(i.getTime());
 				break;
 			    }
-			case 6: // long
+			case 11: // timestamp
+			    {
+				java.sql.Timestamp i = rs.getTimestamp(ind);
+				if (rs.wasNull()) {
+				    dataOut.writeByte(0);
+				    continue;
+				}
+				dataOut.writeByte(1);
+				dataOut.writeLong(i.getTime());
+				break;
+			    }
+		        case 6: // long
 			    {
 				long i = rs.getLong(ind);
 				if (rs.wasNull()) {

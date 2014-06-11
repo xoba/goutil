@@ -73,7 +73,7 @@ func checkJava() {
 		f.Write([]byte(javasrc))
 		f.Close()
 		check(exec.Command("javac", "GoJdbc.java").Run())
-		os.Remove("GoJdbc.java")
+		// os.Remove("GoJdbc.java")
 	}
 }
 
@@ -163,6 +163,11 @@ func (s *stmt) Exec(args []driver.Value) (driver.Result, error) {
 			s.conn.ch.WriteString(s.id)
 			s.conn.ch.WriteInt32(int32(i + 1))
 			s.conn.ch.WriteFloat64(x)
+		case time.Time:
+			s.conn.ch.WriteByte(14)
+			s.conn.ch.WriteString(s.id)
+			s.conn.ch.WriteInt32(int32(i + 1))
+			s.conn.ch.WriteInt64(x.UnixNano() / 1000000)
 		default:
 			fmt.Printf("unhandled: %T %v\n", x, x)
 		}
@@ -266,6 +271,9 @@ func (r *rows) Close() error {
 	return nil
 }
 func (r *rows) Next(dest []driver.Value) error {
+	for i, x := range dest {
+		fmt.Printf("dest[%d] = %v %T\n", i, x, x)
+	}
 	r.conn.ch.WriteByte(6)
 	r.conn.ch.WriteString(r.id)
 	b, err := r.conn.ch.ReadByte()
@@ -349,6 +357,18 @@ func (r *rows) Next(dest []driver.Value) error {
 				v, err := r.conn.ch.ReadInt64()
 				check(err)
 				t := time.Unix(0, v*1000000)
+				t = t.In(time.UTC)
+				dest[i] = t
+			}
+		case "java.sql.Timestamp":
+			r.conn.ch.WriteByte(11)
+			b, err := r.conn.ch.ReadByte()
+			check(err)
+			if b == 1 {
+				v, err := r.conn.ch.ReadInt64()
+				check(err)
+				t := time.Unix(0, v*1000000)
+				t = t.In(time.UTC)
 				dest[i] = t
 			}
 		case "java.lang.String":
