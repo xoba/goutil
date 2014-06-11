@@ -230,7 +230,18 @@ public class GoJdbc {
 				dataOut.writeLong(i.getTime());
 				break;
 			    }
-			case 6: // long
+			case 11: // timestamp
+			    {
+				java.sql.Timestamp i = rs.getTimestamp(ind);
+				if (rs.wasNull()) {
+				    dataOut.writeByte(0);
+				    continue;
+				}
+				dataOut.writeByte(1);
+				dataOut.writeLong(i.getTime());
+				break;
+			    }
+		        case 6: // long
 			    {
 				long i = rs.getLong(ind);
 				if (rs.wasNull()) {
