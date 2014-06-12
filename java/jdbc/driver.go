@@ -262,7 +262,7 @@ func (r *rows) Next(dest []driver.Value) error {
 	if b == 0 {
 		return io.EOF
 	}
-	for i, _ := range r.names {
+	for i := range r.names {
 		r.conn.ch.WriteByte(7)
 		r.conn.ch.WriteString(r.id)
 		r.conn.ch.WriteInt32(int32(i + 1))
