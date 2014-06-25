@@ -44,6 +44,9 @@ public class GoJdbc {
 	DataInputStream dataIn = new DataInputStream(System.in);
 	DataOutputStream dataOut = new DataOutputStream(System.out);
 
+writeString(dataOut,"d75b40c8-ee5c-4f64-86e2-2e2e936e7aa6");
+dataOut.flush();
+
 	boolean done = false;
 	while (!done) {
 	    try {
