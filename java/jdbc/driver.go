@@ -60,13 +60,16 @@ func (j Driver) Open(name string) (driver.Conn, error) {
 	cmd.Stderr = os.Stderr
 	ch, err := java.NewChan(cmd)
 	if err != nil {
+		cmd.Process.Kill()
 		return nil, err
 	}
 	str, err := ch.ReadString()
 	if err != nil {
+		cmd.Process.Kill()
 		return nil, err
 	}
 	if str != "d75b40c8-ee5c-4f64-86e2-2e2e936e7aa6" {
+		cmd.Process.Kill()
 		return nil, fmt.Errorf("bad handshake with jdbc")
 	}
 	return &conn{ch}, nil
