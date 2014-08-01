@@ -4,6 +4,7 @@ package smtpc
 
 type PlainTextEmail struct {
 	To      []string
+	Cc      []string
 	From    string
 	Subject string
 	Content string
@@ -17,6 +18,7 @@ func (p PlainTextEmail) ToMultipart() MultipartEmail {
 	return MultipartEmail{
 		Meta: Meta{
 			To:      p.To,
+			Cc:      p.Cc,
 			From:    p.From,
 			Subject: p.Subject,
 		},

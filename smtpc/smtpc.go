@@ -96,6 +96,9 @@ func SendMulti(auth Auth, email MultipartEmail) error {
 	header.Set("Subject", email.Subject)
 	header.Set("From", email.From)
 	header.Set("To", strings.Join(email.To, ", "))
+	if len(email.Cc) > 0 {
+		header.Set("Cc", strings.Join(email.Cc, ", "))
+	}
 	header.Set("MIME-Version", "1.0")
 	header.Set("Content-Type", "multipart/mixed; boundary="+boundary)
 	for k, v := range header {
