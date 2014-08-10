@@ -14,10 +14,11 @@ import (
 func Run(args []string, delay time.Duration, f func(error)) {
 	path, err := os.Readlink("/proc/self/exe")
 	if err != nil {
+		f(err)
 		panic(err)
 	}
-	log.Printf("\"%s %s\"\n", path, strings.Join(args, " "))
 	for {
+		log.Printf("\"%s %s\"\n", path, strings.Join(args, " "))
 		start := time.Now()
 		if err := try(path, args); err != nil {
 			f(err)
