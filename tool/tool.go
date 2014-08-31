@@ -32,7 +32,23 @@ type HasName interface {
 }
 
 func Flags(i Interface) *flag.FlagSet {
+	return FlagsWithDoc(i, "")
+}
+
+func FlagsWithDoc(i Interface, doc string) *flag.FlagSet {
 	fs := flag.NewFlagSet(Name(i), flag.ExitOnError)
+	fs.Usage = func() {
+		if len(Description(i)) > 0 {
+			fmt.Printf("usage of %q (%s):\n", Name(i), Description(i))
+
+		} else {
+			fmt.Printf("usage of %q:\n", Name(i))
+		}
+		fs.PrintDefaults()
+		if len(doc) > 0 {
+			fmt.Println(doc)
+		}
+	}
 	return fs
 }
 
@@ -183,11 +199,11 @@ var (
 
 type wrapper struct {
 	name string
-	Interface
+	f    RunFunc
 }
 
 func (w wrapper) Run(args []string) {
-	RunInterface(w.Interface, args)
+	w.f(args)
 }
 
 func (w wrapper) Name() string {
@@ -198,7 +214,7 @@ func (w wrapper) Name() string {
 	}
 }
 
-func Named(name string, i Interface) Interface {
+func Named(name string, i RunFunc) Interface {
 	return wrapper{name, i}
 }
 
