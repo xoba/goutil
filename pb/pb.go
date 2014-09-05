@@ -22,13 +22,13 @@ func Iterate(pr Problem, weights []float64, lr float64) error {
 		for j := 0; j < p; j++ {
 			f += weights[j] * pr.Observations[i][j]
 		}
-		q[i] = 1 / (1 + math.Exp(float64(pr.Responses[i])*f))
+		q[i] = 1 / (1 + math.Exp(pr.Responses[i]*f))
 	}
 	var up, um float64
 	var errs []error
 	for j := 0; j < p; j++ {
 		for i := 0; i < n; i++ {
-			if float64(pr.Responses[i])*pr.Observations[i][j] > 0 {
+			if pr.Responses[i]*pr.Observations[i][j] > 0 {
 				up += q[i] * math.Abs(pr.Observations[i][j])
 			} else {
 				um += q[i] * math.Abs(pr.Observations[i][j])
