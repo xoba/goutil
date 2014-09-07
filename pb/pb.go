@@ -13,6 +13,16 @@ type Problem struct {
 	Responses    []float64
 }
 
+func (p Problem) ObservationCount() int {
+	return len(p.Responses)
+}
+func (p Problem) PredictorCount() int {
+	if len(p.Observations) == 0 {
+		return 0
+	}
+	return len(p.Observations[0])
+}
+
 func Iterate(pr Problem, weights []float64, lr float64) error {
 	n := len(pr.Observations)
 	p := len(weights)
@@ -47,10 +57,12 @@ func Iterate(pr Problem, weights []float64, lr float64) error {
 	return nil
 }
 
-func LogisticRisk(pr Problem, weights []float64) (out float64) {
+type LossFunction func(y float64, f Features, w []float64) float64
+
+func Risk(pr Problem, weights []float64, lf LossFunction) (out float64) {
 	n := len(pr.Observations)
 	for i := 0; i < n; i++ {
-		out += LogisticLoss(pr.Responses[i], pr.Observations[i], weights)
+		out += lf(pr.Responses[i], pr.Observations[i], weights)
 	}
 	return out / float64(n)
 }
@@ -62,4 +74,13 @@ func LogisticLoss(y float64, f Features, w []float64) float64 {
 		x += w[j] * f[j]
 	}
 	return math.Log(1 + math.Exp(-y*x))
+}
+
+func LinearLoss(y float64, f Features, w []float64) float64 {
+	p := len(w)
+	var x float64
+	for j := 0; j < p; j++ {
+		x += w[j] * f[j]
+	}
+	return math.Pow(y-x, 2)
 }
