@@ -2,12 +2,10 @@ package goutil
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
-	"syscall"
 	"time"
 
 	"code.google.com/p/go-uuid/uuid"
@@ -27,21 +25,6 @@ func init() {
 			blackHole = append(blackHole, i)
 		}
 	}()
-}
-
-func GrabAppLock(path string) (locked bool, appId string) {
-	locked = ExclusiveLock(path, 3*time.Second, AppIdLocker(func(id string, f *os.File) {
-		m := make(map[string]string)
-		m["path"] = path
-		m["id"] = id
-		if buf, err := json.Marshal(m); err == nil {
-			appId = string(buf)
-		} else {
-			appId = id
-		}
-		GCBlackHole() <- f
-	}))
-	return
 }
 
 // maintains a persistent uuid
@@ -71,33 +54,6 @@ func AppIdLocker(callback func(string, *os.File)) func(*os.File) bool {
 		callback(id, f)
 		return true
 	}
-}
-
-// grab exclusive r/w lock within deadline, callback on successfully locked file
-// note that if the file gets garbage collected, lock is released!
-func ExclusiveLock(path string, deadline time.Duration, callback func(*os.File) bool) bool {
-
-	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0666)
-	if err != nil {
-		return false
-	}
-
-	ch := make(chan error)
-
-	go func() {
-		ch <- syscall.Flock(int(file.Fd()), syscall.LOCK_EX)
-	}()
-
-	select {
-	case <-ch:
-		if err != nil {
-			return false
-		}
-	case <-time.After(deadline):
-		return false
-	}
-
-	return callback(file)
 }
 
 func StartHttp(port int, message string) error {
