@@ -161,3 +161,13 @@ func Add(a, b Function, samples int) Function {
 	}
 	return out.Init()
 }
+
+func LogRange(min, max float64, n int) (out []float64) {
+	logMin := math.Log(min)
+	logMax := math.Log(max)
+	for i := 0; i < n; i++ {
+		f := logMin + float64(i)*(logMax-logMin)/float64(n-1)
+		out = append(out, math.Exp(f))
+	}
+	return
+}
