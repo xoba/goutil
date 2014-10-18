@@ -8,11 +8,13 @@ import (
 	"time"
 )
 
-type WorkQueue interface {
-
+type WorkSubmitter interface {
 	// submit a function to queue
 	Submit(f func())
+}
 
+type WorkQueue interface {
+	WorkSubmitter
 	// close queue and wait for all functions to execute
 	Wait()
 }
