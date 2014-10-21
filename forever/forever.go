@@ -18,11 +18,13 @@ func Run(args []string, delay time.Duration, f func(error)) {
 		panic(err)
 	}
 	for {
-		log.Printf("\"%s %s\"\n", path, strings.Join(args, " "))
+		log.Printf("running forever \"%s %s\"\n", path, strings.Join(args, " "))
 		start := time.Now()
 		if err := try(path, args); err != nil {
 			f(err)
-			log.Printf("got error: %v\n", err)
+			log.Printf("forever %q exited with error: %v\n", path, err)
+		} else {
+			log.Printf("forever %q exited\n", path)
 		}
 		end := time.Now()
 		if end.Sub(start) < delay {
