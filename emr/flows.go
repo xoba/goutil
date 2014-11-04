@@ -73,7 +73,6 @@ func getFlowAndAuth(args []string, m map[string]aws.Auth) (string, aws.Auth) {
 	flags.StringVar(&flow, "id", "", "the job flow to debug")
 	flags.StringVar(&auth, "auth", "default", "the authorization to choose")
 	flags.Parse(args)
-
 	a := func() aws.Auth {
 		switch {
 		case len(m) == 0:
@@ -85,15 +84,15 @@ func getFlowAndAuth(args []string, m map[string]aws.Auth) (string, aws.Auth) {
 		}
 		return m[auth]
 	}()
-
 	return flow, a
 }
 
 func (m *ShowFlow) Run(args []string) {
-
 	flow, a := getFlowAndAuth(args, m.Auth)
+	if len(flow) == 0 {
+		log.Fatal("needs flow id!")
+	}
 	r := FetchFlow(a, flow)
-
 	if buf, err := json.MarshalIndent(r, "", "  "); err == nil {
 		fmt.Println(string(buf))
 
@@ -101,13 +100,11 @@ func (m *ShowFlow) Run(args []string) {
 			fmt.Printf("step %d: %v\n", i, s.Output())
 		}
 	}
-
 	if len(r.MasterDNS) > 0 {
 		cmd := exec.Command("xdg-open", fmt.Sprintf("http://%s:9100", r.MasterDNS))
 		cmd.Dir = "/tmp"
 		cmd.Start()
 	}
-
 }
 
 type RunFlowResponse struct {
