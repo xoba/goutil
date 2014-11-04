@@ -623,7 +623,7 @@ func LapackToolChecker(path string, t tool.Interface) error {
 
 func createScript(t tool.Interface, checker ToolChecker, args ...string) string {
 
-	cmd := "go/bin/" + os.Args[0]
+	cmd := "bin/" + os.Args[0]
 
 	if checker == nil {
 		// since amazon emr doesn't have these libs
