@@ -118,7 +118,6 @@ func ParseEmrResponse(r io.Reader) (*RunFlowResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println(x, err)
 	return &x, nil
 }
 
