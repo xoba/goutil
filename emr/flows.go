@@ -128,6 +128,7 @@ func FetchFlow(a aws.Auth, flow string) *FlowsResponse {
 	u := createSignedURL(a, v)
 	resp, err := runReq(u)
 	check(err)
+	defer resp.Close()
 	d := xml.NewDecoder(resp)
 	var r FlowsResponse
 	check(d.Decode(&r))
