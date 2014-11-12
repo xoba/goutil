@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"code.google.com/p/go-uuid/uuid"
+	"github.com/xoba/goutil"
 	"github.com/xoba/goutil/aws"
 	"github.com/xoba/goutil/aws/s3"
 	"github.com/xoba/goutil/tool"
@@ -761,27 +762,10 @@ func runTicker(name string, d time.Duration) {
 	var c int
 	for {
 		time.Sleep(d)
-		count(name, fmt.Sprintf("%03d (%s)", c, FormatDuration(d)), 1)
+		count(name, fmt.Sprintf("%03d (%s)", c, goutil.FormatDuration(d)), 1)
 		c++
 		d *= 4
 		d /= 3
-	}
-}
-
-func FormatDuration(d time.Duration) string {
-	switch {
-	case d < 0:
-		return d.String()
-	case d < time.Minute:
-		return fmt.Sprintf("%.2fs", d.Seconds())
-	case d < time.Hour:
-		return fmt.Sprintf("%.2fm", d.Minutes())
-	case d < 24*time.Hour:
-		return fmt.Sprintf("%.2fh", d.Hours())
-	case d < 365*24*time.Hour:
-		return fmt.Sprintf("%.2fd", d.Hours()/24)
-	default:
-		return fmt.Sprintf("%.2fy", d.Hours()/24/365)
 	}
 }
 

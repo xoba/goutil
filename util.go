@@ -532,3 +532,25 @@ func FormatIsoUtc(t time.Time) string {
 func ParseIsoUtc(t string) (time.Time, error) {
 	return time.ParseInLocation(IsoFormat, t, time.UTC)
 }
+
+// format duration using integers only
+func FormatDuration(dur time.Duration) string {
+	switch {
+	case dur < 0:
+		return dur.String()
+	case dur < time.Minute:
+		return fmt.Sprintf("%.0fs", dur.Seconds())
+	case dur < time.Hour:
+		m := time.Duration(dur.Minutes())
+		return fmt.Sprintf("%dm", m) + FormatDuration(dur-m*time.Minute)
+	case dur < 24*time.Hour:
+		h := time.Duration(dur.Hours())
+		return fmt.Sprintf("%dh", h) + FormatDuration(dur-h*time.Hour)
+	case dur < 365*24*time.Hour:
+		days := time.Duration(dur.Hours() / 24)
+		return fmt.Sprintf("%dd", days) + FormatDuration(dur-days*24*time.Hour)
+	default:
+		years := time.Duration(dur.Hours() / 24 / 365)
+		return fmt.Sprintf("%dy", years) + FormatDuration(dur-years*24*365*time.Hour)
+	}
+}
