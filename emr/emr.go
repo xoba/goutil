@@ -760,9 +760,28 @@ func (m *MapTool) Description() string {
 func runTicker(name string, d time.Duration) {
 	var c int
 	for {
-		count(name, fmt.Sprintf("%05d * %v (%v)", c, d, time.Duration(c)*d), 1)
-		c++
 		time.Sleep(d)
+		count(name, fmt.Sprintf("%03d (%s)", c, FormatDuration(d)), 1)
+		c++
+		d *= 4
+		d /= 3
+	}
+}
+
+func FormatDuration(d time.Duration) string {
+	switch {
+	case d < 0:
+		return d.String()
+	case d < time.Minute:
+		return fmt.Sprintf("%.2fs", d.Seconds())
+	case d < time.Hour:
+		return fmt.Sprintf("%.2fm", d.Minutes())
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%.2fh", d.Hours())
+	case d < 365*24*time.Hour:
+		return fmt.Sprintf("%.2fd", d.Hours()/24)
+	default:
+		return fmt.Sprintf("%.2fy", d.Hours()/24/365)
 	}
 }
 
@@ -941,7 +960,7 @@ func (m *ReduceTool) Description() string {
 	return m.description
 }
 
-const TICKER = 300 * time.Second
+const TICKER = 60 * time.Second
 
 func (m *ReduceTool) Run(args []string) {
 	go runTicker("reduce", TICKER)
