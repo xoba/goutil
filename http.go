@@ -51,6 +51,16 @@ func RunSSLRedirector(port int, rf RedirectorFunc) error {
 	return s.ListenAndServe()
 }
 
+type OptionalRedirectorFunc func(w http.ResponseWriter, r *http.Request) (handled bool, redirect string)
+
+func RunOptionalSSLRedirector(port int, rf OptionalRedirectorFunc) error {
+	s := &http.Server{
+		Addr:    fmt.Sprintf(":%d", port),
+		Handler: &OptionalRedirector{rf},
+	}
+	return s.ListenAndServe()
+}
+
 type Redirector struct {
 	Transformer RedirectorFunc
 }
@@ -60,6 +70,28 @@ func (f Redirector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if f.Transformer != nil {
 		u := f.Transformer(r)
 		if len(u) > 0 {
+			http.Redirect(w, r, u, http.StatusTemporaryRedirect)
+			return
+		}
+	}
+	u := r.URL
+	u.Host = r.Host
+	u.Scheme = "https"
+	http.Redirect(w, r, u.String(), http.StatusTemporaryRedirect)
+}
+
+type OptionalRedirector struct {
+	Transformer OptionalRedirectorFunc
+}
+
+func (f OptionalRedirector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	if f.Transformer != nil {
+		h, u := f.Transformer(w, r)
+		switch {
+		case h:
+			return
+		case len(u) > 0:
 			http.Redirect(w, r, u, http.StatusTemporaryRedirect)
 			return
 		}
