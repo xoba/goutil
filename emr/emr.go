@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"code.google.com/p/go-uuid/uuid"
+	"github.com/xoba/goutil"
 	"github.com/xoba/goutil/aws"
 	"github.com/xoba/goutil/aws/s3"
 	"github.com/xoba/goutil/tool"
@@ -623,7 +624,7 @@ func LapackToolChecker(path string, t tool.Interface) error {
 
 func createScript(t tool.Interface, checker ToolChecker, args ...string) string {
 
-	cmd := "go/bin/" + os.Args[0]
+	cmd := "bin/" + os.Args[0]
 
 	if checker == nil {
 		// since amazon emr doesn't have these libs
@@ -760,9 +761,11 @@ func (m *MapTool) Description() string {
 func runTicker(name string, d time.Duration) {
 	var c int
 	for {
-		count(name, fmt.Sprintf("%05d * %v (%v)", c, d, time.Duration(c)*d), 1)
-		c++
 		time.Sleep(d)
+		count(name, fmt.Sprintf("%03d (%s)", c, goutil.FormatDuration(d)), 1)
+		c++
+		d *= 4
+		d /= 3
 	}
 }
 
@@ -941,7 +944,7 @@ func (m *ReduceTool) Description() string {
 	return m.description
 }
 
-const TICKER = 300 * time.Second
+const TICKER = 60 * time.Second
 
 func (m *ReduceTool) Run(args []string) {
 	go runTicker("reduce", TICKER)
