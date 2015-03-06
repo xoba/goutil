@@ -401,6 +401,25 @@ func Check(e error) {
 
 // ----------------------------------------
 
+type KeyValueII struct {
+	Key   int
+	Value int
+}
+type KeyValueListII []KeyValueII
+
+func (k KeyValueListII) Len() int {
+	return len(k)
+}
+func (k KeyValueListII) Less(i, j int) bool {
+	return k[i].Value < k[j].Value
+}
+
+func (k KeyValueListII) Swap(i, j int) {
+	k[i], k[j] = k[j], k[i]
+}
+
+// ----------------------------------------
+
 type Filter interface {
 	Update(t time.Time, x float64) float64
 }
