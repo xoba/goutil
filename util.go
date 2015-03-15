@@ -598,3 +598,9 @@ func FormatApproxDuration(dur time.Duration, terms int) string {
 		return fmt.Sprintf("%dy", years) + FormatApproxDuration(dur-years*24*365*time.Hour, terms-1)
 	}
 }
+
+func check(e error) {
+	if e != nil {
+		panic(e)
+	}
+}
