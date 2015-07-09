@@ -8,78 +8,159 @@ import (
 	"os"
 	"runtime"
 	"sort"
+	"strings"
 	"time"
 )
 
-type CommandFunc func(f Args)
-
-type Args struct {
-	Slice []string
-	*flag.FlagSet
-}
-
-func (a Args) Parse() error {
-	return a.FlagSet.Parse(a.Slice)
-}
-
-type Setup struct {
-	cmds map[string]command
-}
-
-func PlatformInit() {
-	runtime.GOMAXPROCS(runtime.NumCPU())
-	rand.Seed(time.Now().UTC().UnixNano())
-	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
-}
-
-func NewSetup() Setup {
-	PlatformInit()
-	return Setup{
-		cmds: make(map[string]command),
-	}
-}
-
-func (s Setup) Add(name, desc string, f CommandFunc) error {
-	if _, ok := s.cmds[name]; ok {
-		return fmt.Errorf("duplicate tool with name: %s", name)
-	}
-	s.cmds[name] = command{
-		name:        name,
-		description: desc,
-		run:         f,
-	}
-	return nil
-}
-
-func (s Setup) Names() (list []string) {
-	for k := range s.cmds {
-		list = append(list, k)
-	}
-	sort.Strings(list)
-	return
-}
-
-func (s Setup) Run() error {
-	if len(os.Args) == 1 || os.Args[1] == "-help" {
-		fmt.Printf("%d tool(s):\n", len(s.cmds))
-		for i, k := range s.Names() {
-			fmt.Printf("  %d. %s — %s\n", i+1, k, s.cmds[k].description)
-		}
-		return nil
-	}
-	cmd, ok := s.cmds[os.Args[1]]
-	if !ok {
-		return fmt.Errorf("unknown tool: %s", os.Args[1])
-	}
-	cmd.run(Args{
-		Slice:   os.Args[2:],
-		FlagSet: flag.NewFlagSet("xyz", flag.ExitOnError),
+func MyTestCommand(parser FlagParser) {
+	var arg string
+	parser(func(f *flag.FlagSet) {
+		f.StringVar(&arg, "", "", "")
 	})
-	return nil
+}
+
+type Command interface {
+	Name() string
+	Description() string
+	Children() Commands
+	Add(Command)
+	Run(FlagParser)
+}
+
+type CommandFunc func(p FlagParser)
+
+type FlagParser func(func(f *flag.FlagSet))
+
+func Wrapper(name, desc string, f CommandFunc) Command {
+	return &command{
+		name:    name,
+		desc:    desc,
+		command: f,
+	}
 }
 
 type command struct {
-	name        string
-	description string
-	run         CommandFunc
+	name     string
+	desc     string
+	children Commands
+	command  CommandFunc
+}
+
+func (c command) Name() string {
+	return c.name
+}
+
+func (c command) Description() string {
+	return c.desc
+}
+
+func (c *command) Add(x Command) {
+	if strings.HasPrefix(x.Name(), "-") {
+		panic("illegal name: " + x.Name())
+	}
+	c.children = append(c.children, x)
+	sort.Sort(c.children)
+}
+
+func (c command) Children() Commands {
+	out := make(Commands, len(c.children))
+	if n := copy(out, c.children); n != len(c.children) {
+		panic("couldn't copy")
+	}
+	return out
+}
+
+func (c *command) Run(p FlagParser) {
+	c.command(p)
+}
+
+func (c *command) runTool(f FlagParser) {
+	nargs := len(os.Args)
+	switch {
+
+	case nargs == 1 || (nargs == 2 && (os.Args[1] == c.name || os.Args[1] == "-help")):
+		fmt.Printf("%s: %s\n", c.Name(), c.Description())
+		for _, c := range c.children {
+			var desc string
+			if n := len(c.Children()); n == 0 {
+				desc = c.Description()
+			} else {
+				desc = fmt.Sprintf("%s (%d subtools)", c.Description(), n)
+			}
+			fmt.Printf("  %s %s — %s\n", os.Args[0], c.Name(), desc)
+		}
+
+	case nargs >= 2:
+		name := os.Args[1]
+		sub := all(c).Find(name)
+		if sub == nil {
+			log.Fatalf("no such command: %q", name)
+		}
+		fp := func(f func(f *flag.FlagSet)) {
+			fs := flag.NewFlagSet(fmt.Sprintf("%s %s", os.Args[0], name), flag.ExitOnError)
+			f(fs)
+			fs.Parse(os.Args[2:])
+		}
+		sub.Run(fp)
+
+	default:
+		panic("illegal")
+	}
+}
+
+func all(cmd Command) (out Commands) {
+	m := make(map[string]Command)
+	_all(cmd, m)
+	for _, v := range m {
+		out = append(out, v)
+	}
+	sort.Sort(out)
+	return
+}
+
+func _all(cmd Command, m map[string]Command) {
+	if _, ok := m[cmd.Name()]; ok {
+		panic("duplicate command: " + cmd.Name())
+	}
+	m[cmd.Name()] = cmd
+	for _, c := range cmd.Children() {
+		_all(c, m)
+	}
+}
+
+func NewSetup(name, desc string) Command {
+	var c *command
+	c = &command{
+		name: name,
+		desc: desc,
+	}
+	c.command = c.runTool
+	return c
+}
+
+type Commands []Command
+
+func (c Commands) Find(name string) Command {
+	for _, x := range c {
+		if x.Name() == name {
+			return x
+		}
+	}
+	return nil
+}
+
+func (c Commands) Len() int {
+	return len(c)
+}
+func (c Commands) Less(i, j int) bool {
+	return c[i].Name() < c[j].Name()
+}
+func (c Commands) Swap(i, j int) {
+	c[i], c[j] = c[j], c[i]
+}
+
+func init() {
+	runtime.GOMAXPROCS(runtime.NumCPU())
+	rand.Seed(time.Now().UTC().UnixNano())
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
 }
