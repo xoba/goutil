@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -75,6 +76,10 @@ func (c *command) Run(p FlagParser) {
 }
 
 func (c *command) runTool(f FlagParser) {
+
+	commands := all(c)
+
+	exe := filepath.Base(os.Args[0])
 	nargs := len(os.Args)
 	switch {
 
@@ -87,17 +92,17 @@ func (c *command) runTool(f FlagParser) {
 			} else {
 				desc = fmt.Sprintf("%s (%d subtools)", c.Description(), n)
 			}
-			fmt.Printf("  %s %s — %s\n", os.Args[0], c.Name(), desc)
+			fmt.Printf("  %s %s — %s\n", exe, c.Name(), desc)
 		}
 
 	case nargs >= 2:
 		name := os.Args[1]
-		sub := all(c).Find(name)
+		sub := commands.Find(name)
 		if sub == nil {
 			log.Fatalf("no such command: %q", name)
 		}
 		fp := func(f func(f *flag.FlagSet)) {
-			fs := flag.NewFlagSet(fmt.Sprintf("%s %s", os.Args[0], name), flag.ExitOnError)
+			fs := flag.NewFlagSet(fmt.Sprintf("%s %s", exe, name), flag.ExitOnError)
 			f(fs)
 			fs.Parse(os.Args[2:])
 		}
@@ -120,7 +125,7 @@ func all(cmd Command) (out Commands) {
 
 func _all(cmd Command, m map[string]Command) {
 	if _, ok := m[cmd.Name()]; ok {
-		panic("duplicate command: " + cmd.Name())
+		panic(fmt.Errorf("duplicate command: %q", cmd.Name()))
 	}
 	m[cmd.Name()] = cmd
 	for _, c := range cmd.Children() {

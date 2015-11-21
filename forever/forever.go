@@ -36,7 +36,7 @@ func Run(args []string, delay time.Duration, f func(error)) {
 func try(path string, args []string) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("oops, recovered running %s: %v", path, r)
+			err = fmt.Errorf("recovered running %s: %v", path, r)
 		}
 	}()
 	cmd := exec.Command(path, args...)

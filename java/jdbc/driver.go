@@ -56,6 +56,7 @@ func (j Driver) Open(name string) (driver.Conn, error) {
 		panic("needs password")
 	}
 	checkJava()
+	fmt.Println("java", "-cp", classPath, "GoJdbc", driver, connStr, user, pass)
 	cmd := exec.Command("java", "-cp", classPath, "GoJdbc", driver, connStr, user, pass)
 	cmd.Stderr = os.Stderr
 	ch, err := java.NewChan(cmd)
@@ -80,10 +81,10 @@ func checkJava() {
 	if err != nil {
 		f, err := os.Create("GoJdbc.java")
 		check(err)
+		// defer os.Remove("GoJdbc.java")
 		f.Write([]byte(javasrc))
 		f.Close()
 		check(exec.Command("javac", "GoJdbc.java").Run())
-		os.Remove("GoJdbc.java")
 	}
 }
 
